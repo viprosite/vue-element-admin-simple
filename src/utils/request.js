@@ -3,8 +3,8 @@ import Store from '@/store'
 
 const timeOut = 10000
 const axiosInstance = axios.create({
-//   baseURL: process.env.VUE_APP_BASE_URL,
-  baseURL: 'http://180.100.214.120:88/prod-api',
+  baseURL: process.env.VUE_APP_BASE_URL,
+  // baseURL: 'http://180.100.*.*:88/prod-api',
   withCredentials: true, // send cookies when cross-domain requests
   timeout: timeOut // request timeout 1
 })
