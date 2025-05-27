@@ -72,6 +72,7 @@
                 :item="item"
                 :navCode="navCode"
                 :isFold="isFold"
+                :defaultActive="defaultActive"
                 @hoverNav="handleHoverNav"
               ></SideBarItem>
             </el-menu>
@@ -327,7 +328,7 @@
 import routers, { sortedWebMenuList } from "../router";
 import i18n from "../i18n/i18n.js";
 import tupian from "../assets/img/home/37.png";
-import { inject } from "vue";
+import { inject, nextTick } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { serviceUrl } from "@/api/setting";
 import Cookies from "js-cookie";
@@ -1231,7 +1232,7 @@ const menuList = ref([
         icon: null,
         enableFlag: true,
         permission: null,
-        frontCode: "inverterList",
+        frontCode: "installConfigManage",
         targetScope: 0,
       },
     ],
@@ -1353,7 +1354,7 @@ const menuList = ref([
         icon: null,
         enableFlag: true,
         permission: null,
-        frontCode: "upgrade",
+        frontCode: "softupgrade",
         targetScope: 0,
       },
       {
@@ -1785,7 +1786,9 @@ onMounted(() => {
 });
 watch(
   () => route.path,
-  (value) => (defaultActive.value = value)
+  (value) => {
+    defaultActive.value = value;
+  }
 );
 </script>
 
