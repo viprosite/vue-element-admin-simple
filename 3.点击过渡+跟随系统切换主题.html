@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>完美圆形主题切换</title>
+    <style>
+        :root {
+            --bg-color: #ffffff;
+            --text-color: #333333;
+            --primary-color: #4285f4;
+            --transition-duration: 1000ms;
+            --circle-size: 0px;
+            --circle-x: 0px;
+            --circle-y: 0px;
+        }
+
+        :root.dark {
+            --bg-color: #1a1a1a;
+            --text-color: #f0f0f0;
+            --primary-color: #8ab4f8;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+            position: relative;
+            overflow: hidden;
+        }
+
+        ::view-transition-old(root),
+        ::view-transition-new(root) {
+            animation: none;
+            mix-blend-mode: normal;
+        }
+
+        /* 进入dark模式和退出dark模式时，两个图像的位置顺序正好相反 */
+        .dark::view-transition-old(root) {
+            z-index: 1;
+        }
+
+        .dark::view-transition-new(root) {
+            z-index: 999;
+        }
+
+        ::view-transition-old(root) {
+            z-index: 999;
+        }
+
+        ::view-transition-new(root) {
+            z-index: 1;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>完美圆形过渡效果</h1>
+        <button id="theme-toggle" onclick="toggleTheme(event)">切换主题</button>
+
+        <div class="card">
+            <h2>真正的按钮中心过渡</h2>
+            <p>这个版本修复了过渡位置问题，<strong>真正从按钮中心</strong>圆形展开。</p>
+            <p>点击按钮时，您会看到新主题从按钮位置完美圆形扩散。</p>
+        </div>
+
+        <div class="card">
+            <h2>实现原理</h2>
+            <ul>
+                <li>使用伪元素创建遮罩层</li>
+                <li>通过clip-path实现圆形裁剪</li>
+                <li>JavaScript动态计算按钮中心点</li>
+                <li>CSS动画控制圆形大小变化</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // 初始化系统主题
+        const initSystemTheme = () => {
+            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            console.log(prefersDark);
+
+            document.documentElement.classList.toggle('dark', prefersDark);
+        };
+
+        // 监听系统主题变化
+        const listenSystemThemeChange = () => {
+            const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+            mediaQuery.addEventListener('change', (event) => {
+                // document.documentElement.classList.toggle('dark', event.matches);
+                toggleTheme()
+            });
+        };
+
+        // 切换主题函数
+        const toggleTheme = (event) => {
+            const centerX = window.innerWidth / 2;
+            const centerY = window.innerHeight / 2;
+            const endRadius = Math.hypot(centerX, centerY);
+
+            let isDark;
+
+            // @ts-ignore
+            const transition = document.startViewTransition(() => {
+                const root = document.documentElement;
+                isDark = root.classList.contains("dark");
+                root.classList.remove(isDark ? "dark" : "light");
+                root.classList.add(isDark ? "light" : "dark");
+            });
+
+            transition.ready.then(() => {
+                const clipPath = [
+                    `circle(0px at ${centerX}px ${centerY}px)`,
+                    `circle(${endRadius}px at ${centerX}px ${centerY}px)`
+                ];
+                document.documentElement.animate(
+                    {
+                        clipPath: isDark ? clipPath.reverse() : clipPath,
+                    },
+                    {
+                        duration: 300,
+                        easing: "ease-in",
+                        pseudoElement: isDark ? "::view-transition-old(root)" : "::view-transition-new(root)",
+                    }
+                );
+            });
+        };
+
+        // 页面加载时初始化系统主题并监听变化
+        window.addEventListener('DOMContentLoaded', () => {
+            initSystemTheme();
+            listenSystemThemeChange();
+        });
+    </script>
+</body>
+
+</html>
