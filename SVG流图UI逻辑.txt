@@ -1,0 +1,2763 @@
+<template>
+  <div style="background: #fff; flex: 1">
+    <svg
+      :viewBox="
+        '0 0 ' + flowLayoutData.endPoint.x + ' ' + flowLayoutData.endPoint.y
+      "
+      width="100%"
+      height="100%"
+      preserveAspectRatio="xMidYMid meet"
+      v-if="calcLayoutFinish && display"
+    >
+      <!-- 中心逆变器 -->
+      <g>
+        <image
+          :href="flowElementsData.centerIV.img.src"
+          :x="flowElementsData.centerIV.layoutXY.x"
+          :y="flowElementsData.centerIV.layoutXY.y"
+          :width="flowElementsData.centerIV.img.w"
+          :height="flowElementsData.centerIV.img.h"
+          @click="alaShow"
+        />
+        <image
+          v-if="plantDetailsList.faultStatus == 2"
+          :href="flowElementsData.centerIV.alarmImg.src"
+          :x="
+            flowElementsData.centerIV.layoutXY.x +
+            flowElementsData.centerIV.img.w / 2 -
+            flowElementsData.centerIV.alarmImg.w / 2
+          "
+          :y="
+            flowElementsData.centerIV.layoutXY.y +
+            flowElementsData.centerIV.img.h / 2 -
+            flowElementsData.centerIV.alarmImg.h / 2
+          "
+          :width="flowElementsData.centerIV.alarmImg.w"
+          :height="flowElementsData.centerIV.alarmImg.h"
+          style="animation: blink 1.5s infinite"
+          @click="alaShow"
+        />
+        <path
+          v-if="flowElementsData.centerIV.path.singleLineShow"
+          :id="flowElementsData.centerIV.path.id"
+          :d="flowElementsData.centerIV.path.line"
+          :stroke="
+            statusLgnth
+              ? flowLayoutData.colors.online
+              : flowLayoutData.colors.offline
+          "
+          :stroke-width="2"
+          fill="none"
+        />
+        <circle
+          r="4"
+          fill="#045F7F"
+          :id="flowElementsData.centerIV.animation.id + 'Circle'"
+          v-if="flowElementsData.centerIV.animation.show"
+        >
+          <animateMotion
+            :dur="flowElementsData.centerIV.animation.dur"
+            :begin="flowElementsData.centerIV.animation.begin ?? '0.001s'"
+            repeatCount="0"
+            :keyPoints="
+              flowElementsData.centerIV.animation.needReverse ? '1;0' : '0;1'
+            "
+            keyTimes="0;1"
+            :id="flowElementsData.centerIV.animation.id"
+          >
+            <mpath :href="'#' + flowElementsData.centerIV.path.id" />
+          </animateMotion>
+        </circle>
+      </g>
+      <g v-for="ele in renderFlowEls" :key="ele.id">
+        <template v-if="ele.show">
+          <g>
+            <image
+              v-if="ele.img.show"
+              :href="ele.img.src"
+              :x="ele.layoutXY.x"
+              :y="ele.layoutXY.y"
+              :width="ele.img.w"
+              :height="ele.img.h"
+            />
+            <image
+              v-if="ele.id == 'grid' && ele.meterImg.show"
+              :href="ele.meterImg.src"
+              :x="ele.layoutXY.x - 8"
+              :y="ele.layoutXY.y + ele.img.h + 3"
+              :width="ele.meterImg.w"
+              :height="ele.meterImg.h"
+            />
+            <image
+              v-if="ele.id == 'homeLoad' && ele.twoWayBulbImg.show"
+              :href="ele.twoWayBulbImg.src"
+              :x="ele.layoutXY.x"
+              :y="ele.layoutXY.y + 3"
+              :width="ele.twoWayBulbImg.w"
+              :height="ele.twoWayBulbImg.h"
+            />
+          </g>
+          <g>
+            <text
+              :x="
+                ele.textPosition == 'left'
+                  ? ele.layoutXY.x - flowLayoutData.gap
+                  : ele.layoutXY.x + ele.img.w + 10
+              "
+              :y="ele.layoutXY.y + 15"
+              font-size="13"
+            >
+              <tspan
+                id="value"
+                :text-anchor="ele.textPosition == 'left' ? 'end' : 'start'"
+              >
+                {{ ele.power }}
+              </tspan>
+              <tspan id="unit" dx="5" fill="gray">{{ ele.unit }}</tspan>
+            </text>
+            <text
+              :id="ele.path.id + '-text'"
+              :x="
+                ele.textPosition == 'left'
+                  ? ele.layoutXY.x - flowLayoutData.gap
+                  : ele.layoutXY.x + ele.img.w + 10
+              "
+              :y="ele.layoutXY.y + 15 + 15"
+              :text-anchor="ele.textPosition == 'left' ? 'end' : 'start'"
+              fill="gray"
+              font-size="13"
+            >
+              {{ ele.name }}
+            </text>
+          </g>
+          <g v-if="ele.id == 'battery'">
+            <text
+              :x="ele.layoutXY.x - flowLayoutData.gap"
+              :y="ele.layoutXY.y + 15"
+              font-size="13"
+              v-if="ele.leftText.top.show"
+            >
+              <tspan id="value" text-anchor="end">
+                {{ ele.leftText.top.value }}
+              </tspan>
+              <tspan id="unit" dx="5" fill="gray">
+                {{ ele.leftText.top.unit }}
+              </tspan>
+            </text>
+            <text
+              :x="ele.layoutXY.x - flowLayoutData.gap"
+              :y="ele.layoutXY.y + 15 + 15"
+              font-size="13"
+              v-if="ele.leftText.bottom.show"
+            >
+              <tspan id="value" text-anchor="end">
+                {{ ele.leftText.bottom.value }}
+              </tspan>
+              <tspan id="unit" dx="5" fill="gray">
+                {{ ele.leftText.bottom.unit }}
+              </tspan>
+            </text>
+          </g>
+          <path
+            :id="ele.path.id"
+            :d="ele.path.line"
+            :stroke="
+              statusLgnth
+                ? flowLayoutData.colors.online
+                : flowLayoutData.colors.offline
+            "
+            :stroke-width="2"
+            fill="none"
+          />
+          <circle
+            :id="ele.animation.id + 'Circle'"
+            r="4"
+            fill="#045F7F"
+            v-if="ele.animation.show"
+          >
+            <animateMotion
+              :dur="ele.animation.dur"
+              :begin="ele.animation.begin ?? '0.001s'"
+              :repeatCount="ele.animation.isLoop ? 'indefinite' : 0"
+              :keyPoints="ele.animation.needReverse ? '1;0' : '0;1'"
+              keyTimes="0;1"
+              :id="ele.animation.id"
+            >
+              <mpath :href="'#' + ele.path.id" />
+            </animateMotion>
+          </circle>
+        </template>
+      </g>
+    </svg>
+  </div>
+</template>
+<script setup>
+// import * as echarts from "echarts";
+import i18n from "@/i18n/i18n.js";
+const { t } = i18n.global;
+import { getenergyflow, plantDevice } from "@/api/api";
+import { computed, nextTick, reactive, watch } from "vue";
+import { flow } from "lodash";
+import { _ } from "lodash";
+const display = ref(false);
+const props = defineProps([
+  "deviceSnNull",
+  "plantIDshow",
+  "getflowData",
+  "isHas50k",
+  "plantList",
+  "alarmShow",
+]);
+const emit = defineEmits(["alarmShow"]);
+const plantDetailsList = ref([]);
+const pvflow = ref(false); //pv流动
+const youflow = ref(false); //油机流动
+const youdis = ref(false); //油机显示
+const youdis1 = ref(false); //油机显示
+const acflow = ref(3); //电网流动0往逆变器流动1往电网流动
+const batteryflow = ref(3); //电池流动0往逆变器流动1往电池流动
+const smartPortflow = ref(false); //智能负载流动
+const smartPortdis = ref(true); //backup
+const csflow = ref(false); //充电桩流动
+const csdis = ref(false); //充电桩显示
+const loadflow = ref(false); //家庭用电流动
+const loaddis = ref(false); //家庭用电显示
+const statusLgnth = ref(false);
+const backShow = ref(0);
+const baiVlog = ref(false);
+const bmsShow = ref(false);
+const kui = ref(3);
+const acinpowr = ref();
+const acctflow = ref(3); // 馈电取电  0向上，1向下
+const negDirection = ref(false);
+const ctPowerText = ref(0);
+const smartPortIcon = ref(false); // 智能端口显示
+const smartPortFlowDir = ref(3); // 智能端口流动方向，3为静止，1向上，2向下
+const microInverse = ref(false); // 微逆图标显示
+const microFlowDir = ref(3); // 微逆流动方向，3为静止，1向上，2向下
+const calcLayoutFinish = ref(false);
+// 逆变器图标右侧是否是只有中间一条线（对应并离网）；右侧分开两条线对应离网
+const isIVRightSingleLine = ref(false);
+// 流向图整体布局信息
+const flowLayoutData = reactive({
+  // 在线离线线条颜色
+  colors: {
+    online: "#09a9f0",
+    offline: "#d5d3d3",
+  },
+  // 左上角坐标起点
+  originPoint: { x: 0, y: 0 },
+  // 右下角坐标终点
+  endPoint: { x: 1060, y: 250 },
+  // 关键点距离坐标轴间距 (流向图的padding)
+  gap: 10,
+});
+// 流向图所有要素配置信息
+/**
+ * 每个要素都有基本的 图标、名字、文字信息（功率单位）
+ * show：控制是否显示该项
+ * point：把该项看成一个点时在坐标中的xy坐标
+ * img：该项的图标src、宽高、在具体位置的偏移计算公式（SVG中给定一个xy默认是元素左上角坐标）
+ *      比如SVG中心点的图标，图标的point是xy(对应图标的左上角)，实际布局应该把该图标的中心点与SVG中心点重合，则需要向左向上宽高的一半
+ *      比如左上角的图标的point的xy，刚好是实际布局时的xy，则无需偏移
+ *      (-w/2表示向左移动自身宽度一半，-y表示向上移动自身宽)
+ * layoutXY：实际布局时图标左上角xy坐标；
+ *      计算方法：根据要素(img)的point的xy,拿到offset将其中的w和h换为img的wh，再加上point的xy就是实际布局左上角坐标
+ * path：连接路线；线路id、线路另一端点anotherEndpoint、自动生成线路时模式mode、线条颜色stroke
+ *      singleLineEndPoint场景：当前元素不是连接到另一个元素而是连接到某一个点构成一线段
+ *      路径计算方法：方向默认从元素连接到另一端点（注意与动画needReverse对应关系），计算生成line和lineArr
+ *        line："M76,208 L76,146.75 L481.5,146.75"  可以直接给svg的path；lineArr就是每个点的坐标二维数组
+ *        特殊场景布局（如左上角左下角要素用直角转角连接到中心要素）注意：从第二个元素开始，如果其图标布局x坐标与前一个点布局x坐标之差绝对值小于20，
+ *        则其路径起点x坐标直接用前一个点的路径起点x值，保证两者的线路竖直方向在一条直线上
+ * animation：线路上流动动画；动画元素id、是否显示show、动画时长dur、是否循环动画isLoop、是否逆向needReverse
+ *
+ * rightVLineCenter、rightVLineBottomCenter都是特殊情况下某些元素连接的另一端点
+ *
+ * 多条线段的动画流控制：
+ * 0. animateMotion动画拿不到circle的实时坐标
+ * 1. svg动画不管条件如何都会自动执行一次
+ * 2. 流动的圆点circle和动画元素animateMotion都可以看做DOM操作
+ * 3. 有延时的animateMotion对应的circle在一开始会显示到SVG左上角，需要判断隐藏，并且监听动画开始事件animEl.addEventListener("beginEvent"使其显示
+ * 4. 如果每个元素都有流入流出的情况，则单独一个个考虑动画衔接；
+ *    如果有ABC3个元素连接到某一公共点，则以A考虑：
+ *      如果A的动画dom即animationMotion存在且A是流出的（流动是否正向要结合A的path生成的line路径），则B或C存在且是流入(反向)情况才会形成链式动画
+ *      如果A的dom存在且是流入(反向)的，则B或C存在且是流出(正向)情况才会形成链式动画
+ *    结合当前元素A是否反向动画以及与其连接的另一些些元素BC的动画是否反向综合判断该元素A的动画结束后该让哪一个元素开始动画
+ *    ！！！注意SVG动画至少都会执行一次，所以该元素A动画结束事件中不需要代码开始另一元素的动画(其会自己开始一次)，只需要监听另一元素的endEvent事件，在事件回调中手动重新开始该元素A动画IVAnim.beginElement();
+ * 5. 如果有的元素有固定的动画开始延迟，在拿不到与其关联的路径动画circle坐标情况下，可以直接用setTimeout控制在固定延时后开始动画
+ */
+const flowElementsData = reactive({
+  // 中心逆变器：注意先计算出layoutXY，在计算connectionPoints各个坐标(依赖layoutXY)
+  // point: {…}, img: {…}, alarmImg: {…}, layoutXY: {…}, connectionPoints: {…}}
+  centerIV: {
+    id: "centerIV",
+    show: true,
+    name: "逆变器",
+    point: {
+      x: flowLayoutData.endPoint.x / 2,
+      y: flowLayoutData.endPoint.y / 2,
+    },
+    img: {
+      src: `${getImageUrl("ni.png")}`,
+      w: 97,
+      h: 87,
+      offset: ["-w/2", "-h/2"],
+    },
+    // layoutXY: calcLayoutXY(centerIV.point, centerIV.img),
+    alarmImg: { src: `${getImageUrl("ala.png")}`, w: 35, h: 30 },
+    path: {
+      id: "centerIV-path",
+      anotherEndpoint: "rightVLineCenter",
+      singleLineEndPoint: "rightVLineCenter",
+      singleLineShow: false,
+      mode: "v",
+      stroke: "#09a9f0",
+    },
+    animation: {
+      id: "centerIVAnimation",
+      show: false,
+      dur: "5s",
+      needReverse: false,
+      isLoop: false,
+    },
+  },
+  pv: {
+    id: "pv",
+    show: true,
+    name: "PV",
+    power: 0,
+    unit: "kW",
+    point: {
+      x: flowLayoutData.originPoint.x + flowLayoutData.gap + 50,
+      y: flowLayoutData.originPoint.y + flowLayoutData.gap,
+    },
+    img: {
+      show: true,
+      src: `${getImageUrl("pv.png")}`,
+      w: 32,
+      h: 38,
+      offset: [],
+    },
+    // layoutXY: calcLayoutXY(pv.point, pv.img),
+    path: {
+      id: "pv-path",
+      line: "",
+      anotherEndpoint: "centerIV.connectionPoints.leftTop",
+      mode: "v",
+      stroke: "#09a9f0",
+    },
+    animation: {
+      id: "pvAnimation",
+      show: false,
+      dur: "5s",
+      needReverse: false,
+      isLoop: true,
+    },
+  },
+  battery: {
+    id: "battery",
+    show: true,
+    name: "电池",
+    power: 0,
+    unit: "kW",
+    leftText: {
+      top: {
+        show: false,
+        value: 0,
+        unit: "V",
+      },
+      bottom: {
+        show: false,
+        value: 0,
+        unit: "%",
+      },
+    },
+    point: {
+      x: flowLayoutData.originPoint.x + flowLayoutData.gap + 50,
+      y: flowLayoutData.endPoint.y - flowLayoutData.gap,
+    },
+    img: {
+      show: true,
+      src: `${getImageUrl("dianchi.png")}`,
+      w: 26,
+      h: 32,
+      offset: ["-h"],
+    },
+    path: {
+      id: "battery-path",
+      line: "",
+      mode: "v",
+      anotherEndpoint: "centerIV.connectionPoints.leftBottom",
+      stroke: "#09a9f0",
+    },
+    animation: {
+      id: "batteryAnimation",
+      show: false,
+      dur: "5s",
+      needReverse: false,
+      isLoop: true,
+    },
+  },
+  // smartLoad智能负载（灯泡）
+  smartLoad: {
+    id: "smartLoad",
+    show: false,
+    name: "智能负载",
+    power: 0,
+    unit: "kW",
+    point: {
+      x: flowLayoutData.endPoint.x / 2,
+      y: flowLayoutData.originPoint.y + flowLayoutData.gap,
+    },
+    img: {
+      show: false,
+      src: `${getImageUrl("dengpao.png")}`,
+      w: 24,
+      h: 32,
+      offset: ["-w/2"],
+    },
+    smartPointImg: {
+      show: false,
+      src: `${getImageUrl("smartport.png")}`,
+      w: 32,
+      h: 32,
+      offset: ["-w/2"],
+    },
+    microIVImg: {
+      show: false,
+      src: `${getImageUrl("mic.png")}`,
+      w: 40,
+      h: 32,
+      offset: ["-w/2"],
+    },
+    generatorImg: {
+      show: false,
+      src: `${getImageUrl("youji.png")}`,
+      w: 36,
+      h: 32,
+      offset: ["-w/2"],
+    },
+    path: {
+      id: "smartLoad-path",
+      line: "",
+      anotherEndpoint: "centerIV.connectionPoints.topCenter",
+      mode: "auto",
+      stroke: "#09a9f0",
+    },
+    animation: {
+      is: "smartLoadAnimation",
+      show: false,
+      dur: "1.5s",
+      needReverse: false,
+      isLoop: true,
+    },
+  },
+  backupLoad: {
+    id: "backupLoad",
+    show: true,
+    name: "备用负载",
+    power: 0,
+    unit: "kW",
+    point: {
+      x: flowLayoutData.endPoint.x / 2,
+      y: flowLayoutData.endPoint.y - flowLayoutData.gap,
+    },
+    img: {
+      show: true,
+      src: `${getImageUrl("xiang.png")}`,
+      w: 39,
+      h: 33,
+      offset: ["-w/2", "-h"],
+    },
+    path: {
+      id: "backupLoad-path",
+      line: "",
+      anotherEndpoint: "centerIV.connectionPoints.bottomCenter",
+      mode: "auto",
+      stroke: "#09a9f0",
+    },
+    animation: {
+      id: "backupLoadAnimation",
+      show: false,
+      dur: "1.5s",
+      needReverse: false,
+      isLoop: true,
+    },
+  },
+  grid: {
+    id: "grid",
+    show: true,
+    name: "电网",
+    power: 0,
+    unit: "kW",
+    textPosition: "left",
+    point: {
+      x: flowLayoutData.endPoint.x - flowLayoutData.gap - 50,
+      y: flowLayoutData.originPoint.y + flowLayoutData.gap,
+    },
+    img: {
+      show: true,
+      src: `${getImageUrl("dianta.png")}`,
+      w: 32,
+      h: 38,
+      offset: ["-w"],
+    },
+    meterImg: {
+      src: `${getImageUrl("biaoxin.png")}`,
+      w: 18,
+      h: 21,
+      offset: [],
+      show: false,
+    },
+    path: {
+      id: "grid-path",
+      line: "",
+      anotherEndpoint: "centerIV.connectionPoints.rightTop",
+      singleLineEndPoint: "rightVLineCenter",
+      mode: "v",
+      stroke: "#09a9f0",
+    },
+    animation: {
+      id: "gridAnimation",
+      show: false,
+      dur: "5s",
+      needReverse: false,
+      isLoop: false,
+    },
+  },
+  homeLoad: {
+    id: "homeLoad",
+    show: false,
+    name: "家庭负载",
+    power: 0,
+    unit: "kW",
+    textPosition: "left",
+    point: {
+      x: flowLayoutData.endPoint.x - flowLayoutData.gap - 50,
+      y: flowLayoutData.endPoint.y - flowLayoutData.gap,
+    },
+    img: {
+      show: false,
+      src: `${getImageUrl("wu.png")}`,
+      w: 23,
+      h: 33,
+      offset: ["-w", "-h"],
+    },
+    twoWayBulbImg: {
+      show: false,
+      src: `${getImageUrl("youdeng.png")}`,
+      w: 13,
+      h: 16,
+      offset: ["-w", "-h"],
+    },
+    path: {
+      id: "homeLoad-path",
+      line: "",
+      anotherEndpoint: "centerIV.connectionPoints.rightBottom",
+      singleLineEndPoint: "rightVLineCenter",
+      mode: "v",
+      stroke: "#09a9f0",
+    },
+    animation: {
+      id: "homeLoadAnimation",
+      show: false,
+      dur: "5s",
+      needReverse: true,
+      isLoop: false,
+    },
+  },
+
+  chargingStation: {
+    id: "chargingStation",
+    show: false,
+    name: "充电桩",
+    power: 0,
+    unit: "kW",
+    textPosition: "left",
+    point: {
+      x: flowLayoutData.endPoint.x - flowLayoutData.gap - 200,
+      y: (flowLayoutData.endPoint.y / 4) * 3,
+    },
+    img: {
+      show: true,
+      src: `${getImageUrl("dianzhang.png")}`,
+      w: 36,
+      h: 26,
+      offset: ["-h/2"],
+    },
+    path: {
+      id: "chargingStation-path",
+      line: "",
+      // anotherEndpoint: {
+      //   x: flowLayoutData.endPoint.x - flowLayoutData.gap - 50,
+      //   y: (flowLayoutData.endPoint.y / 4) * 3,
+      // },
+      anotherEndpoint: "rightVLineBottomCenter",
+      singleLineEndPoint: "rightVLineBottomCenter",
+      mode: "v",
+      stroke: "#09a9f0",
+    },
+    animation: {
+      id: "csAnimation",
+      show: false,
+      dur: "2.5s",
+      needReverse: true,
+      isLoop: false,
+    },
+  },
+  elementNames: [
+    "centerIV",
+    "pv",
+    "battery",
+    "smartLoad",
+    "backupLoad",
+    "grid",
+    "homeLoad",
+    "chargingStation",
+  ],
+  // // 逆变器图标右侧中点坐标
+  IVRightCenter: {
+    // x: flowLayoutData.endPoint.x / 2 + flowElementsData.centerIV.img.w / 2,
+    // y: flowLayoutData.endPoint.y / 2,
+  },
+  // // 右侧grid-homeLoad纵向线条中点 X坐标有重新计算
+  rightVLineCenter: {
+    // x: flowLayoutData.endPoint.x - flowLayoutData.gap - 50,
+    // y: flowLayoutData.endPoint.y / 2,
+  },
+  // 右侧grid-homeLoad纵向线条四分之三处（底部中点） X坐标有重新计算
+  rightVLineBottomCenter: {
+    // x: flowLayoutData.endPoint.x - flowLayoutData.gap,
+    // y: (flowLayoutData.endPoint.y / 4) * 3,
+  },
+});
+// IV右侧单条线时，右侧都是单独线，独立控制每条path的动画次序，可能出现的情况
+// IVToRight从逆变器流向右侧,IV流向右侧隐藏circle，开始grid/homeLoad，结束后IV再次开始
+// rightToIV grid流向逆变器,grid流向右侧中点隐藏circle，开始iv/homeLoad，结束后grid再次开始
+// gridToHomeLoad grid流向右侧中点隐藏circle，开始homeLoad，结束后grid再次开始
+//IVGridToHomeLoad iv和grid同时流动到右侧中点隐藏circlr，开始homeLoad，结束后grid再次开始
+const animationSituations = {
+  IVToRight: 1,
+  rightToIV: 2,
+  gridToHomeLoad: 3,
+  IVGridToHomeLoad: 4,
+};
+
+const renderFlowEls = computed(() => {
+  return flowElementsData.elementNames
+    .map((name) => flowElementsData[name])
+    .filter((item) => item.id != "centerIV");
+});
+console.log(renderFlowEls);
+
+onMounted(() => {
+  // 根据数据布局流图
+  layoutFlow();
+  getflow();
+});
+
+function getImageUrl(name) {
+  return new URL(`../../../assets/img/liuxiangtu/${name}`, import.meta.url)
+    .href;
+}
+// 根据计算后的数据布局流图
+const layoutFlow = () => {
+  /**
+   * 1. 所有要素的point的xy，是把要素看为一个点得出的坐标；实际布局需要考虑要素的width-height
+   *    <image> 的 x 和 y 属性默认是图像的 左上角 坐标，偏移计算规则：
+   *      (-w/2表示向左移动自身宽度一半，-y表示向上移动自身宽),传入向左向上偏移量
+   * */
+
+  /**
+   * 根据要素(img)的point的xy，计算其在坐标系中左上角坐标
+   * 拿到offset，将其中的w和h换为img的wh，再加上point的xy就是实际布局左上角坐标
+   * */
+  function calcLayoutXY(point, img) {
+    let { x, y } = point;
+    let { w, h, offset } = img;
+    let result = { x, y };
+    if (offset && offset.length > 0) {
+      offset.forEach((item) => {
+        result.x += item.includes("w") ? eval(item.replace("w", w)) : 0;
+        result.y += item.includes("h") ? eval(item.replace("h", h)) : 0;
+      });
+    }
+    return result;
+  }
+  flowElementsData.elementNames.forEach((name) => {
+    let ele = flowElementsData[name];
+    ele.layoutXY = calcLayoutXY(ele.point, ele.img);
+  });
+  // 计算中心逆变器各个连接点的坐标用于自动计算得出连接线
+  function calcIVConnectionPoints(layoutXY, img) {
+    let { x, y } = layoutXY;
+    let { w, h } = img;
+    return {
+      leftTop: { x, y: y + h / 4 },
+      leftCenter: { x, y: y + h / 2 },
+      leftBottom: { x, y: y + (3 / 4) * h },
+      topCenter: { x: x + w / 2, y },
+      bottomCenter: { x: x + w / 2, y: y + h },
+      rightTop: { x: x + w, y: y + h / 4 },
+      rightCenter: { x: x + w, y: y + h / 2 },
+      rightBottom: { x: x + w, y: y + (3 / 4) * h },
+    };
+  }
+  flowElementsData.centerIV.connectionPoints = calcIVConnectionPoints(
+    flowElementsData.centerIV.layoutXY,
+    flowElementsData.centerIV.img
+  );
+  // rightVLineCenter和rightVLineBottomCenter实际的x坐标
+  flowElementsData.rightVLineCenter = {
+    x: flowElementsData.grid.layoutXY.x + flowElementsData.grid.img.w / 2,
+    y: flowLayoutData.endPoint.y / 2,
+  };
+  flowElementsData.rightVLineBottomCenter = {
+    x: flowElementsData.grid.layoutXY.x + flowElementsData.grid.img.w / 2,
+    // y: (flowLayoutData.endPoint.y / 4) * 3,
+    y:
+      flowElementsData.rightVLineCenter.y +
+      (flowElementsData.homeLoad.layoutXY.y -
+        flowElementsData.rightVLineCenter.y) /
+        2,
+  };
+  flowElementsData.chargingStation.point.y =
+    flowElementsData.rightVLineBottomCenter.y;
+  // 传入两点坐标生成连接线
+  // point1:[]  point2:{x,y}  mode: h（horizontal 先横再纵） v（vertical 先纵再横）
+  function generatePath(point1, point2, mode = "auto") {
+    let [x1, y1] = point1;
+    let { x: x2, y: y2 } = point2;
+    let points = [];
+
+    if (mode === "h") {
+      // 先横向再纵向
+      points = [
+        [x1, y1],
+        [x2, y1],
+        [x2, y2],
+      ];
+    } else if (mode === "v") {
+      // 先纵向再横向
+      points = [
+        [x1, y1],
+        [x1, y2],
+        [x2, y2],
+      ];
+    } else {
+      // 自动选择：哪边距离远，就先走哪边
+      if (Math.abs(x2 - x1) > Math.abs(y2 - y1)) {
+        points = [
+          [x1, y1],
+          [x1, y2],
+          [x2, y2],
+        ]; // 先竖再横
+      } else {
+        points = [
+          [x1, y1],
+          [x2, y1],
+          [x2, y2],
+        ]; // 先横再竖
+      }
+    }
+
+    points.map((p) => p.join(",")).join(" ");
+    let result = {
+      lineArr: points,
+      line: `M${points[0]} L${points[1]} L${points[2]}`,
+    };
+    if (id) {
+      result.id = id;
+    }
+    return result;
+  }
+  // needPathEls注意顺序：左上左下 中上中下  右上右下
+  let needPathEls = [...flowElementsData.elementNames].map(
+    (name) => flowElementsData[name]
+  );
+
+  // isIVRightSingleLine说明IV右侧只有一条线 有家庭负载、充电桩
+  // 此时电网、家庭负载、充电桩、IVRight用各自单独线（避免重叠线宽）
+  if (isIVRightSingleLine.value) {
+    let notGeneratePathElIds = [
+      "grid",
+      "homeLoad",
+      "chargingStation",
+      "centerIV",
+    ];
+    needPathEls.forEach((item) => {
+      if (notGeneratePathElIds.includes(item.id)) {
+        item.path.anotherEndpoint = item.path.singleLineEndPoint;
+      }
+    });
+    flowElementsData.centerIV.path.singleLineShow = true;
+  }
+  console.log(flowElementsData.centerIV.connectionPoints, needPathEls);
+  needPathEls.forEach((item, index) => {
+    // 创建线的第一个点坐标
+    let generatePathPoint1 = [
+      item.layoutXY.x + item.img.w / 2,
+      item.layoutXY.y + item.img.h,
+    ];
+    // 如果是逆变器或充电桩，为图标右侧中心点
+    if (item.id == "centerIV" || item.id == "chargingStation") {
+      generatePathPoint1 = [
+        item.layoutXY.x + item.img.w,
+        item.layoutXY.y + item.img.h / 2,
+      ];
+    }
+    console.log("flowElementsData." + item.id + item.path.anotherEndpoint);
+
+    item.path.anotherEndpoint =
+      typeof item.path.anotherEndpoint == "string"
+        ? eval("flowElementsData." + item.path.anotherEndpoint)
+        : item.path.anotherEndpoint;
+    if (index > 0) {
+      let preEl = needPathEls[index - 1];
+      let { x: preElLayoutX, y: preElLayoutY } = preEl.layoutXY;
+      let { w: preElImgW, h: preElImgH } = preEl.img;
+      // 如果当前点的x坐标减去前一个点的x坐标绝对值<=20，说明是上下位置，则当前点连接线起点x坐标直接用前一个点的连接线起点x坐标，保证上下连接线对齐
+      if (Math.abs(item.layoutXY.x - preElLayoutX) <= 20) {
+        generatePathPoint1 = [preElLayoutX + preElImgW / 2, item.layoutXY.y];
+      }
+    }
+    let { line, lineArr } = generatePath(
+      generatePathPoint1,
+      item.path.anotherEndpoint,
+      item.path.mode
+    );
+    item.path.line = line;
+    item.path.lineArr = lineArr;
+  });
+  // console.log(needPathEls);
+
+  calcLayoutFinish.value = true;
+};
+
+const alaShow = () => {
+  if (plantDetailsList.value.faultStatus == 2) {
+    emit("alarmShow");
+  }
+};
+const getflow = () => {
+  console.log(props.plantList, props.getflowData, "props.deviceSnNull");
+
+  if (props.getflowData.deviceSn == null) {
+    return false;
+  }
+  if (!props.getflowData.deviceSn && props.plantList.length !== 1) {
+    baiVlog.value = false;
+  } else {
+    baiVlog.value = true;
+  }
+
+  display.value = false;
+  let arr = "";
+  if (props.getflowData.deviceSn == null) {
+    arr = "";
+  } else {
+    arr = props.getflowData.deviceSn;
+  }
+  let data = {
+    plantId: props.getflowData.plantId || "",
+    deviceSn: arr,
+    pageNum: 1,
+    pageSize: 9999,
+  };
+  getenergyflow(data).then((res) => {
+    if (res.code == 200) {
+      plantDetailsList.value = res.data;
+      // if (plantDetailsList.value.electricityMeterLink == 1) {
+      //   plantDetailsList.value.acTtlInPower = plantDetailsList.value.CtPower;
+      // }
+      // plantDetailsList.acTtlInPower > plantDetailsList.meterPower;
+
+      plantDetailsList.value.acTtlInPower = Number(
+        plantDetailsList.value.acTtlInPower
+      );
+      acinpowr.value = plantDetailsList.value.acTtlInPower;
+      plantDetailsList.value.meterPower = Number(
+        plantDetailsList.value.meterPower
+      );
+      if (
+        plantDetailsList.value.acTtlInPower !== null &&
+        plantDetailsList.value.acTtlInPower > plantDetailsList.value.meterPower
+      ) {
+        kui.value = 0;
+      } else if (
+        plantDetailsList.value.acTtlInPower !== null &&
+        plantDetailsList.value.acTtlInPower == plantDetailsList.value.meterPower
+      ) {
+        kui.value = 3;
+      } else {
+        kui.value = 1;
+      }
+
+      if (
+        plantDetailsList.value.has50K == true ||
+        plantDetailsList.value.hasTrexLp == true
+      ) {
+        plantDetailsList.value.type = "T-REX";
+      }
+      if (
+        plantDetailsList.value.deviceStatus == "NM" ||
+        plantDetailsList.value.deviceStatus == "AL" ||
+        plantDetailsList.value.deviceStatus == "FT"
+      ) {
+        statusLgnth.value = true;
+      } else {
+        statusLgnth.value = false;
+      }
+      // 判断PV流动
+      if (
+        plantDetailsList.value.pvTotalPower !== null &&
+        Number(plantDetailsList.value.pvTotalPower) >
+          Number(
+            plantDetailsList.value.thMap.pvTotalPower == null
+              ? 0
+              : plantDetailsList.value.thMap.pvTotalPower
+          )
+      ) {
+        pvflow.value = true;
+        flowElementsData.pv.animation.show = true;
+      }
+
+      // 判断智能负载,油机器显示
+      if (plantDetailsList.value.smartPort == 0) {
+        youdis.value = true;
+        youdis1.value = false;
+      } else if (plantDetailsList.value.smartPort == 1) {
+        youdis.value = false;
+        youdis1.value = true;
+      } else if (plantDetailsList.value.smartPort == -1) {
+        smartPortIcon.value = true; // 智能端口显示
+      } else if (plantDetailsList.value.smartPort == 2) {
+        microInverse.value = true; // 微逆显示
+      } else {
+        youdis.value = false;
+        youdis1.value = false;
+      }
+
+      if (plantDetailsList.value.smartPort == -1) {
+        smartPortIcon.value = true;
+      }
+
+      if (plantDetailsList.value.smartPort == 2) {
+        microInverse.value = true;
+      }
+
+      // 判断油机流动
+      if (
+        plantDetailsList.value.genPower !== null &&
+        Math.abs(plantDetailsList.value.genPower) >
+          Number(plantDetailsList.value.thMap.genPower)
+      ) {
+        youflow.value = true;
+      }
+
+      // 判断智能端口,绝对值跟阈值比较，绝对值大于阈值的情况下 ->   负值向上，正值向下
+      if (
+        plantDetailsList.value.genPower !== null &&
+        Math.abs(plantDetailsList.value.genPower) >
+          Number(plantDetailsList.value.thMap.genPower)
+      ) {
+        if (Number(plantDetailsList.value.genPower > 0)) {
+          smartPortFlowDir.value = 2; // 正值向下
+        }
+        if (Number(plantDetailsList.value.genPower < 0)) {
+          smartPortFlowDir.value = 1; // 负值向上
+        }
+      }
+
+      // 判断微逆流动，预定值时，2向下
+      if (
+        plantDetailsList.value.microInvTotalPower !== null &&
+        Math.abs(plantDetailsList.value.microInvTotalPower) >
+          Number(plantDetailsList.value.thMap.microInvTotalPower)
+      ) {
+        microFlowDir.value = 2;
+      }
+
+      // 判断智能负载流动
+      if (
+        plantDetailsList.value.smartLoadTotalPower !== null &&
+        Math.abs(plantDetailsList.value.smartLoadTotalPower) >
+          Number(plantDetailsList.value.thMap.smartLoadTotalPower)
+      ) {
+        youflow.value = true;
+      }
+
+      // 微逆流动
+      if (
+        plantDetailsList.value.microInvTotalPower !== null &&
+        Number(plantDetailsList.value.microInvTotalPower) >
+          Number(plantDetailsList.value.thMap.microInvTotalPower)
+      ) {
+        microFlowDir.value = 2;
+      }
+
+      // 判断backup流动
+      if (
+        plantDetailsList.value.acTotalOutActPower !== null &&
+        Math.abs(Number(plantDetailsList.value.acTotalOutActPower)) >
+          Number(
+            plantDetailsList.value.thMap.acTotalOutActPower == null
+              ? 0
+              : plantDetailsList.value.thMap.acTotalOutActPower
+          )
+      ) {
+        smartPortflow.value = true;
+        smartPortdis.value = true;
+      }
+
+      // 判断backup反方向流动
+      if (
+        plantDetailsList.value.acTotalOutActPower !== null &&
+        Number(plantDetailsList.value.acTotalOutActPower) < 0
+      ) {
+        let num = Math.abs(Number(plantDetailsList.value.acTotalOutActPower));
+        if (
+          num >
+          Number(
+            plantDetailsList.value.thMap.acTotalOutActPower == null
+              ? 0
+              : plantDetailsList.value.thMap.acTotalOutActPower
+          )
+        ) {
+          smartPortflow.value = true;
+          smartPortdis.value = true;
+          negDirection.value = true;
+        }
+      }
+
+      // OperM = 2&&DParEn=1&& MstSlv=0
+      //() 判断电网流动
+      if (plantDetailsList.value.cpShowType == 1) {
+        if (
+          plantDetailsList.value.ctPower !== null &&
+          Number(plantDetailsList.value.ctPower) >
+            Number(plantDetailsList.value.thMap.ctPower)
+        ) {
+          acctflow.value = 0;
+        }
+        if (
+          plantDetailsList.value.ctPower !== null &&
+          Number(plantDetailsList.value.ctPower) <
+            Number(plantDetailsList.value.thMap.ctPower) &&
+          Math.abs(plantDetailsList.value.ctPower) >
+            Number(plantDetailsList.value.thMap.ctPower)
+        ) {
+          acctflow.value = 1;
+        }
+        console.log(acctflow.value, "acctflow.value1");
+      } else {
+        if (
+          plantDetailsList.value.acTtlInPower !== null &&
+          Number(plantDetailsList.value.acTtlInPower) >
+            Number(plantDetailsList.value.thMap.acTtlInPower)
+        ) {
+          acctflow.value = 1;
+        }
+        if (
+          plantDetailsList.value.acTtlInPower !== null &&
+          Number(plantDetailsList.value.acTtlInPower) <
+            Number(plantDetailsList.value.thMap.acTtlInPower) &&
+          Math.abs(plantDetailsList.value.acTtlInPower) >
+            Number(plantDetailsList.value.thMap.acTtlInPower)
+        ) {
+          acctflow.value = 0;
+        }
+        console.log(acctflow.value, "acctflow.value2");
+      }
+      console.log(acctflow.value, "acctflow.value");
+
+      // 3号线流动逻辑
+      if (plantDetailsList.value.cpShowType == 1) {
+        if (
+          plantDetailsList.value.acTtlInPower !== null &&
+          Math.abs(plantDetailsList.value.acTtlInPower) >=
+            Number(plantDetailsList.value.thMap.acTtlInPower)
+        ) {
+          if (Number(plantDetailsList.value.acTtlInPower) > 0) {
+            acflow.value = 1;
+          } else {
+            acflow.value = 0;
+          }
+        } else {
+          acflow.value = 3;
+        }
+      } else {
+        if (acinpowr.value !== null && acinpowr.value < 0) {
+          // 电网馈电
+          acflow.value = 0;
+        } else if (acinpowr.value == null || acinpowr.value >= 0) {
+          if (
+            plantDetailsList.value.acTtlInPower !== null &&
+            plantDetailsList.value.meterPower !== null
+          ) {
+            let acTtlInPowerNum = Number(plantDetailsList.value.acTtlInPower); // 取电功率
+            let meterPowerNum = Number(plantDetailsList.value.meterPower); // 并网测值
+            if (acTtlInPowerNum < meterPowerNum) {
+              acflow.value = 0;
+            } else if (acTtlInPowerNum > meterPowerNum) {
+              acflow.value = 1;
+            } else {
+              acflow.value = 3;
+            }
+          } else {
+            acflow.value = 3;
+          }
+        }
+        // if(plantDetailsList.value.acTtlInPower !== null &&
+        //   Number(plantDetailsList.value.acTtlInPower)>0){
+        //   if (
+        //     plantDetailsList.value.acTtlInPower !== null &&
+        //     Number(plantDetailsList.value.acTtlInPower) >
+        //       Number(plantDetailsList.value.thMap.acTtlInPower)
+        //   ) {
+        //     acflow.value = 1;
+        //   }
+        //   if (
+        //     plantDetailsList.value.acTtlInPower !== null &&
+        //     Number(plantDetailsList.value.acTtlInPower) <
+        //       Number(plantDetailsList.value.thMap.acTtlInPower) &&
+        //     Math.abs(plantDetailsList.value.acTtlInPower) >
+        //       Number(plantDetailsList.value.thMap.acTtlInPower)
+        //   ) {
+        //     acflow.value = 0;
+        //   }
+        //   } else {
+        //     acflow.value = 0;
+        //   }
+      }
+
+      if (plantDetailsList.value.emsPower > 0) {
+        bmsShow.value = true;
+      } else {
+        bmsShow.value = false;
+      }
+      // 判断电充电流动
+      if (
+        plantDetailsList.value.batteryCharging !== null &&
+        Number(plantDetailsList.value.emsPower) >
+          Number(plantDetailsList.value.thMap.emsPower)
+      ) {
+        batteryflow.value = 0;
+      }
+      // 判断电池放电流动
+      if (
+        plantDetailsList.value.batteryCharging !== null &&
+        Number(plantDetailsList.value.emsPower) <
+          Number(plantDetailsList.value.thMap.emsPower) &&
+        Math.abs(plantDetailsList.value.emsPower) >
+          Number(plantDetailsList.value.thMap.emsPower)
+      ) {
+        batteryflow.value = 1;
+      }
+      if (plantDetailsList.value.familyLoad == 1) {
+        backShow.value = 0;
+      } else {
+        backShow.value = 1;
+      }
+      isIVRightSingleLine.value = backShow.value == 0 ? true : false;
+      layoutFlow();
+      // 充电桩流动
+      if (
+        plantDetailsList.value.csAcTotalPower !== null &&
+        Number(plantDetailsList.value.csAcTotalPower) >
+          Number(plantDetailsList.value.thMap.csAcTotalPower)
+      ) {
+        csflow.value = true;
+        csdis.value = true;
+      }
+      // 充电桩显示
+
+      // 并网显示
+      if (
+        (plantDetailsList.value.meterPower !== null &&
+          Number(plantDetailsList.value.meterPower) >
+            Number(plantDetailsList.value.thMap.meterPower)) ||
+        Math.abs(Number(plantDetailsList.value.meterPower)) >
+          Number(plantDetailsList.value.thMap.meterPower)
+      ) {
+        loadflow.value = true;
+      }
+      plantDetailsList.value.emsVoltage2 = Number(
+        plantDetailsList.value.emsVoltage2
+      );
+
+      // 补充逻辑，家庭负载为负值，流动方向为向右，并且电网不流动时候，线路均不流动
+      if (
+        smartPortflow.value == true &&
+        plantDetailsList.value.meterPower !== null &&
+        Number(plantDetailsList.value.meterPower) < 0 &&
+        acflow.value == 0 &&
+        acctflow.value == 3
+      ) {
+        if (backShow.value == 0) {
+          loadflow.value = false;
+        }
+        acflow.value = 3;
+      }
+
+      nextTick(() => {
+        display.value = true;
+        plantDetailsList.value.batteryCharging = Math.abs(
+          plantDetailsList.value.batteryCharging
+        );
+        plantDetailsList.value.batteryDischarge = Math.abs(
+          plantDetailsList.value.batteryDischarge
+        );
+        plantDetailsList.value.emsPower = Math.abs(
+          plantDetailsList.value.emsPower
+        );
+        plantDetailsList.value.acTtlInPower = Math.abs(
+          plantDetailsList.value.acTtlInPower
+        );
+        ctPowerText.value = Math.abs(plantDetailsList.value.ctPower);
+        console.log(3444, ctPowerText.value);
+        if (
+          plantDetailsList.value.has50K ||
+          plantDetailsList.value.hasTrexLp == true ||
+          plantDetailsList.value.toKw == 1
+        ) {
+          plantDetailsList.value.pvTotalPower = (
+            Number(plantDetailsList.value.pvTotalPower) / 1000
+          ).toFixed(2);
+          plantDetailsList.value.emsPower = (
+            Number(plantDetailsList.value.emsPower) / 1000
+          ).toFixed(2);
+          plantDetailsList.value.genPower = (
+            Number(plantDetailsList.value.genPower) / 1000
+          ).toFixed(2);
+          plantDetailsList.value.smartLoadTotalPower = (
+            Number(plantDetailsList.value.smartLoadTotalPower) / 1000
+          ).toFixed(2);
+          plantDetailsList.value.microInvTotalPower = (
+            Number(plantDetailsList.value.microInvTotalPower) / 1000
+          ).toFixed(2);
+          plantDetailsList.value.acTtlInPower = (
+            Number(plantDetailsList.value.acTtlInPower) / 1000
+          ).toFixed(2);
+          plantDetailsList.value.csAcTotalPower = (
+            Number(plantDetailsList.value.csAcTotalPower) / 1000
+          ).toFixed(2);
+          plantDetailsList.value.acTotalOutActPower = (
+            Number(plantDetailsList.value.acTotalOutActPower) / 1000
+          ).toFixed(2);
+          ctPowerText.value = (Number(ctPowerText.value) / 1000).toFixed(2);
+          plantDetailsList.value.meterPower = (
+            Number(plantDetailsList.value.meterPower) / 1000
+          ).toFixed(2);
+        }
+        associationFlowElementsData();
+      });
+    }
+  });
+};
+
+const associationFlowElementsData = () => {
+  let {
+    centerIV,
+    pv,
+    battery,
+    smartLoad,
+    backupLoad,
+    grid,
+    homeLoad,
+    chargingStation,
+  } = flowElementsData;
+  // 1. PV
+  pv.power = plantDetailsList.value.pvTotalPower || 0;
+  pv.unit = plantDetailsList.value.toKw ? "kW" : "W";
+  pv.name = t("lang.langPV");
+  if (statusLgnth.value && pvflow.value) {
+    pv.animation.show = true;
+    pv.animation.dur = "5s";
+  } else {
+    pv.animation.show = false;
+  }
+  // 2.电池
+  battery.name = bmsShow.value ? t("lang.btCharge") : t("lang.btDischarge");
+  battery.power = plantDetailsList.value?.emsPower || 0;
+  battery.unit = plantDetailsList.value.toKw ? "kW" : "W";
+  if (baiVlog.value && plantDetailsList.value?.bmsFlag2 != null) {
+    if (!plantDetailsList.value?.bmsFlag) {
+      battery.leftText.top.show = true;
+      battery.leftText.top.value = plantDetailsList.value?.emsVoltage || 0;
+      battery.leftText.top.unit = "V";
+    }
+    if (plantDetailsList.value?.bmsFlag2 == 0) {
+      if (
+        plantDetailsList.value?.emsVoltage2 >= 150 &&
+        plantDetailsList.value?.bparEn != 1
+      ) {
+        battery.leftText.top.show = true;
+        battery.leftText.top.value = plantDetailsList.value?.emsVoltage2 || 0;
+        battery.leftText.top.unit = "V";
+      }
+    }
+    if (plantDetailsList.value?.bmsFlag) {
+      battery.leftText.bottom.show = true;
+      battery.leftText.bottom.value = plantDetailsList.value?.emsSoc || 0;
+      battery.leftText.bottom.unit = "%";
+    }
+    if (plantDetailsList.value?.bmsFlag2 == 1) {
+      if (
+        plantDetailsList.value?.emsVoltage2 >= 150 &&
+        plantDetailsList.value?.bparEn != 1
+      ) {
+        battery.leftText.bottom.show = true;
+        battery.leftText.bottom.value = plantDetailsList.value?.emsSoc2 || 0;
+        battery.leftText.bottom.unit = "%";
+      }
+    }
+  }
+  if (baiVlog.value && plantDetailsList.value?.bmsFlag2 == null) {
+    if (!plantDetailsList.value?.bmsFlag) {
+      battery.leftText.top.show = true;
+
+      battery.leftText.top.value = plantDetailsList.value?.emsVoltage || 0;
+      battery.leftText.top.unit = "V";
+      if (
+        plantDetailsList.value?.emsVoltage2 >= 150 &&
+        plantDetailsList.value?.bparEn != 1
+      ) {
+        battery.leftText.top.show = true;
+
+        battery.leftText.top.value = plantDetailsList.value?.emsVoltage2 || 0;
+        battery.leftText.top.unit = "V";
+      }
+    }
+    if (plantDetailsList.value?.bmsFlag) {
+      battery.leftText.bottom.show = true;
+
+      battery.leftText.bottom.value = plantDetailsList.value?.emsSoc || 0;
+      battery.leftText.bottom.unit = "%";
+      if (
+        plantDetailsList.value?.emsVoltage2 >= 150 &&
+        plantDetailsList.value?.bparEn != 1
+      ) {
+        battery.leftText.bottom.show = true;
+        battery.leftText.bottom.value = plantDetailsList.value?.emsSoc2 || 0;
+        battery.leftText.bottom.unit = "%";
+      }
+    }
+  }
+  if (statusLgnth.value) {
+    if (batteryflow.value == 3) {
+      battery.animation.show = false;
+    }
+    if (batteryflow.value == 0 || batteryflow.value == 1) {
+      battery.animation.show = true;
+      battery.animation.dur = "5s";
+    }
+    // batteryflow == 0  IV->battery
+    battery.animation.needReverse = batteryflow.value == 0;
+  }
+  // 3.智能负载
+  // 四类设备显示条件：（都是同一位置）
+  // 油机：youdis && statusLgnth
+  // 智能负载（灯泡）：youdis1 && statusLgnth
+  // 智能端口：smartPortIcon && statusLgnth
+  // 微逆：microInverse && statusLgnth
+  let { generatorImg, img, smartPointImg, microIVImg } = smartLoad;
+  let _img = { ...img }; // 备份img，其他设备根据条件替换为img
+  if (statusLgnth.value) {
+    smartLoad.unit = plantDetailsList.value.toKw ? "kW" : "W";
+    if (youdis.value) {
+      smartLoad.show = true;
+      smartLoad.img = generatorImg;
+      smartLoad.img.show = true;
+      smartLoad.layoutXY.x -= 8;
+      smartLoad.name = t("lang.generator");
+      smartLoad.power = plantDetailsList.value?.genPower || 0;
+    } else if (youdis1.value) {
+      smartLoad.show = true;
+      smartLoad.img = _img;
+      smartLoad.img.show = true;
+      smartLoad.name = t("lang.smartload");
+      smartLoad.power = plantDetailsList.value?.smartLoadTotalPower || 0;
+    } else if (smartPortIcon.value) {
+      smartLoad.show = true;
+      smartLoad.img = smartPointImg;
+      smartLoad.img.show = true;
+      smartLoad.layoutXY.x -= 5;
+      smartLoad.name = t("lang.smartPortData");
+      smartLoad.power = plantDetailsList.value?.genPower || 0;
+    } else if (microInverse.value) {
+      smartLoad.show = true;
+      smartLoad.img = microIVImg;
+      smartLoad.img.show = true;
+      smartLoad.layoutXY.x -= 8;
+      smartLoad.name = t("lang.microinVersion");
+      smartLoad.power = plantDetailsList.value?.microInvTotalPower || 0;
+    }
+  }
+  // 油机,智能负载，智能端口，流动
+  if (
+    (youflow.value && statusLgnth.value && youdis.value) ||
+    (youflow.value && statusLgnth.value && youdis1.value) ||
+    (microInverse.value && statusLgnth.value && microFlowDir.value == 2) ||
+    (smartPortIcon.value && statusLgnth.value && smartPortFlowDir.value !== 3)
+  ) {
+    if (
+      youdis.value ||
+      (microInverse.value && microFlowDir.value == 2) ||
+      (smartPortIcon.value && smartPortFlowDir.value == 2)
+    ) {
+      smartLoad.animation.show = true;
+      smartLoad.animation.dur = "1.5s";
+      smartLoad.path.stroke = flowLayoutData.colors.online;
+    }
+    if (youdis1.value || (smartPortFlowDir.value == 1 && smartPortIcon.value)) {
+      smartLoad.animation.show = true;
+      smartLoad.animation.dur = "1.5s";
+      smartLoad.animation.needReverse = true;
+      smartLoad.path.stroke = flowLayoutData.colors.online;
+    }
+  }
+  // 油机,智能负载，智能端口，不流动
+  if (
+    (!youflow.value && statusLgnth.value && youdis.value) ||
+    (!youflow.value && statusLgnth.value && youdis1.value) ||
+    (microInverse.value && statusLgnth.value && microFlowDir.value !== 2) ||
+    (smartPortIcon.value && statusLgnth.value && smartPortFlowDir.value == 3)
+  ) {
+    smartLoad.animation.show = false;
+    smartLoad.path.stroke = flowLayoutData.colors.online;
+  }
+  // 4.备用负载  ~  6.家庭负载 联合处理
+  // backShow==0时有家庭负载，备用负载在逆变器正下方,家庭负载在右下方
+  // backShow==1时无家庭负载，备用负载在右下方
+  if (backShow.value == 0) {
+    backupLoad.show = true;
+    backupLoad.img.show = true;
+    homeLoad.show = true;
+    homeLoad.img.show = true;
+    backupLoad.name = t("lang.backupLoad");
+    backupLoad.power = plantDetailsList.value?.acTotalOutActPower || 0;
+    backupLoad.unit = plantDetailsList.value.toKw ? "kW" : "W";
+    homeLoad.name = t("lang.homeLoad");
+    homeLoad.power = plantDetailsList.value?.meterPower || 0;
+    homeLoad.unit = plantDetailsList.value.toKw ? "kW" : "W";
+    // 二路灯泡
+    if (plantDetailsList.value.bulb == 1) {
+      homeLoad.twoWayBulbImg.show = true;
+    }
+    // IV-backupLoad
+    if (
+      smartPortdis.value &&
+      statusLgnth.value &&
+      smartPortflow.value &&
+      backShow.value == 0
+    ) {
+      if (!negDirection.value) {
+        backupLoad.animation.needReverse = true;
+        backupLoad.animation.show = true;
+        backupLoad.animation.dur = "1.5s";
+      } else {
+        backupLoad.animation.show = true;
+        backupLoad.animation.dur = "1.5s";
+      }
+    }
+    if (
+      smartPortdis.value &&
+      statusLgnth.value &&
+      !smartPortflow.value &&
+      backShow.value == 0
+    ) {
+      backupLoad.animation.show = false;
+      backupLoad.path.stroke = flowLayoutData.colors.online;
+    }
+    if (!statusLgnth.value && smartPortdis.value && backShow.value == 0) {
+      backupLoad.animation.show = false;
+      backupLoad.path.stroke = flowLayoutData.colors.offline;
+    }
+
+    // IV-homeLoad  TODO 原是判断 smartPortflow
+    if (loadflow.value && statusLgnth.value && backShow.value == 0) {
+      // alert(1);
+      // alert(negDirection.value);
+      if (!negDirection.value) {
+        homeLoad.animation.needReverse = true;
+        homeLoad.animation.begin = "5s";
+        homeLoad.animation.show = true;
+        homeLoad.animation.dur = "5s";
+      } else {
+        homeLoad.animation.show = true;
+        homeLoad.animation.dur = "5s";
+      }
+    }
+    if (!smartPortflow.value && statusLgnth.value && backShow.value == 0) {
+      homeLoad.animation.show = false;
+      homeLoad.path.stroke = flowLayoutData.colors.online;
+    }
+    if (!statusLgnth.value && backShow.value == 0) {
+      homeLoad.animation.show = false;
+      homeLoad.path.stroke = flowLayoutData.colors.offline;
+    }
+  } else if (backShow.value == 1) {
+    backupLoad.show = true;
+    backupLoad.img.show = true;
+    homeLoad.show == false;
+    homeLoad.img.show = false;
+    backupLoad.name = t("lang.backupLoad");
+    backupLoad.power = plantDetailsList.value?.acTotalOutActPower || 0;
+    backupLoad.unit = plantDetailsList.value.toKw ? "kW" : "W";
+    // 没有家庭负载时备用负载显示到右侧
+    let { layoutXY, path, point, textPosition, twoWayBulbImg, animation } =
+      homeLoad;
+    backupLoad.layoutXY = layoutXY;
+    backupLoad.layoutXY.x -= 10; // 备用负载图标相对家庭负载图标横向中心点偏移量
+    backupLoad.path = path;
+    backupLoad.point = point;
+    backupLoad.textPosition = textPosition;
+    backupLoad.twoWayBulbImg = twoWayBulbImg;
+
+    // IV-backupLoad
+    if (
+      smartPortdis.value &&
+      statusLgnth.value &&
+      smartPortflow.value &&
+      backShow.value == 1
+    ) {
+      // 逆变器->下中
+      if (!negDirection.value) {
+        backupLoad.animation.show = true;
+        backupLoad.animation.dur = animation.dur;
+        backupLoad.animation.needReverse = true;
+      } else {
+        backupLoad.animation.show = true;
+        backupLoad.animation.dur = animation.dur;
+      }
+    }
+    if (
+      smartPortdis.value &&
+      statusLgnth.value &&
+      !smartPortflow.value &&
+      backShow.value == 0
+    ) {
+      backupLoad.animation.show = false;
+      backupLoad.path.stroke = flowLayoutData.colors.online;
+    }
+    if (!statusLgnth.value && smartPortdis.value && backShow.value == 0) {
+      backupLoad.animation.show = false;
+      backupLoad.path.stroke = flowLayoutData.colors.offline;
+    }
+    if (plantDetailsList.value.bulb == 1) {
+      // 二路灯泡
+      backupLoad.twoWayBulbImg.show = true;
+    }
+  }
+  // 5.电网
+  // 显示电表图标
+  if (plantDetailsList.value.electricityMeterLink == 1) {
+    grid.meterImg.show = true;
+  }
+  if (plantDetailsList.value.cpShowType == 1) {
+    grid.power = ctPowerText.value || 0;
+    grid.unit = plantDetailsList.value.toKw ? "kW" : "W";
+    if (
+      (plantDetailsList.value.cpShowType == 1 &&
+        Number(plantDetailsList.value.ctPower) < 0) ||
+      ((plantDetailsList.value.cpShowType !== 1 ||
+        plantDetailsList.value.cpShowType == null) &&
+        plantDetailsList.value.acTtlInPower < 0)
+    ) {
+      grid.name = t("lang.ACFeed");
+    } else {
+      grid.name = t("lang.ACInput");
+    }
+  } else {
+    grid.power = plantDetailsList.value.acTtlInPower || 0;
+    grid.unit = plantDetailsList.value.toKw ? "kW" : "W";
+    if (acinpowr.value < 0) {
+      grid.name = t("lang.ACFeed");
+    } else {
+      grid.name = t("lang.ACInput");
+    }
+  }
+
+  // // 电塔-下中-IV 直角  流动线
+  if (
+    (acflow.value == 0 && statusLgnth.value && backShow.value == 1) ||
+    (acflow.value == 1 && statusLgnth.value && backShow.value == 1)
+  ) {
+    // 电塔->逆变器
+    if (acflow.value == 0 && acctflow.value !== 3) {
+      grid.animation.show = true;
+      grid.animation.dur = "5s";
+      grid.animation.needReverse = true;
+      grid.animation.isLoop = true;
+    }
+
+    // 逆变器->电塔
+    if (acflow.value == 1 && acctflow.value !== 3) {
+      grid.animation.show = true;
+      grid.animation.dur = "5s";
+      grid.animation.isLoop = true;
+    }
+  }
+  if (!statusLgnth.value) {
+    grid.animation.show = false;
+    grid.path.stroke = flowLayoutData.colors.offline;
+  }
+
+  // // iv <-> 右边三条线中间那条线 流动  backShow.value == 0有家庭负载 右侧4条线各自流
+  if (
+    (acflow.value == 1 && statusLgnth.value && backShow.value == 0) ||
+    (acflow.value == 0 && statusLgnth.value && backShow.value == 0) ||
+    (statusLgnth.value && backShow.value == 0 && loadflow.value)
+  ) {
+    // alert(1);
+    if (
+      ((plantDetailsList.value.cpShowType == 0 &&
+        kui.value == 1 &&
+        acctflow.value !== 3) ||
+        (plantDetailsList.value?.meterPower !== 0 &&
+          plantDetailsList.value.cpShowType == 0 &&
+          acflow.value == 0)) &&
+      (acctflow.value == 0 ||
+        (plantDetailsList.value?.meterPower > 0 && loadflow.value))
+    ) {
+      // alert(2);
+      centerIV.path.singleLineShow = true;
+      centerIV.animation.show = true;
+      centerIV.animation.dur = "5s";
+    }
+    if (
+      (acctflow.value !== 3 || smartPortflow.value || loadflow.value) &&
+      ((acflow.value == 1 &&
+        plantDetailsList.value.cpShowType == 1 &&
+        acctflow.value != 3) ||
+        (acflow.value == 1 &&
+          plantDetailsList.value.cpShowType == 0 &&
+          kui.value == 0 &&
+          acctflow.value != 3) ||
+        (acflow.value == 1 &&
+          plantDetailsList.value.cpShowType == 0 &&
+          loadflow.value &&
+          plantDetailsList.value?.meterPower < 0) ||
+        (acflow.value == 1 &&
+          plantDetailsList.value.cpShowType == 1 &&
+          loadflow.value &&
+          kui.value == 0))
+    ) {
+      // alert(3);
+      centerIV.path.singleLineShow = true;
+      centerIV.animation.show = true;
+      centerIV.animation.dur = "5s";
+      centerIV.animation.needReverse = true;
+      centerIV.animation.begin = "5s";
+      // centerIV.animation.isLoop = true;
+    }
+    if (
+      (plantDetailsList.value.cpShowType == 1 &&
+        acflow.value == 0 &&
+        acctflow.value !== 3) ||
+      (plantDetailsList.value?.meterPower !== 0 &&
+        plantDetailsList.value.cpShowType == 1 &&
+        acflow.value == 0)
+    ) {
+      // alert(4);
+      centerIV.path.singleLineShow = true;
+      centerIV.animation.show = true;
+      centerIV.animation.dur = "5s";
+    }
+  }
+
+  // // 右上 -> 右中   18未测到   19流动异常020505004823490007
+  if (
+    (acctflow.value == 0 && statusLgnth.value && backShow.value == 0) ||
+    (acctflow.value == 1 && statusLgnth.value && backShow.value == 0)
+  ) {
+    // alert(11);
+    // 负数家庭负载50k  0-290   8k裂相有微逆
+    if (acctflow.value == 1 && plantDetailsList.value?.cpShowType == 1) {
+      // alert(12);
+      grid.animation.show = true;
+      grid.animation.needReverse = true;
+      grid.animation.begin = centerIV.animation.dur;
+    }
+    // -145 145
+    if (
+      acctflow.value == 0 &&
+      plantDetailsList.value?.cpShowType == 1 &&
+      acflow.value == 0
+    ) {
+      // alert(13);
+      grid.show = true;
+      grid.animation.show = true;
+    }
+    // -145  145
+    if (
+      acctflow.value == 1 &&
+      plantDetailsList.value?.cpShowType == 0 &&
+      acflow.value == 0
+    ) {
+      // alert(14);
+      grid.show = true;
+      grid.animation.show = true;
+    }
+    // 0 290
+    if (
+      acctflow.value == 0 &&
+      plantDetailsList.value?.cpShowType == 1 &&
+      acflow.value == 1
+    ) {
+      // alert(15);
+      grid.show = true;
+      grid.animation.show = true;
+      // grid.animation.isLoop = true;
+    }
+    // 0 290 反向  020510060021109008
+    if (acctflow.value == 0 && plantDetailsList.value?.cpShowType == 0) {
+      // alert(16);
+      grid.show = true;
+      grid.animation.show = true;
+      grid.animation.needReverse = true;
+      grid.animation.begin = centerIV.animation.dur;
+    }
+    // 0 290
+    if (
+      acctflow.value == 1 &&
+      plantDetailsList.value?.cpShowType == 0 &&
+      acflow.value == 1
+    ) {
+      // alert(17);
+      grid.animation.show = true;
+    }
+    // 0 145
+    if (
+      acctflow.value == 0 &&
+      plantDetailsList.value?.cpShowType == 1 &&
+      acflow.value === 3
+    ) {
+      // alert(18);
+      grid.animation.show = true;
+    }
+    // 0 145
+    if (
+      acctflow.value == 1 &&
+      plantDetailsList.value?.cpShowType == 0 &&
+      acflow.value == 3
+    ) {
+      // alert(19);
+      grid.animation.show = true;
+    }
+  }
+  // // 右中->右下
+  if (
+    (loadflow.value && statusLgnth.value && backShow.value == 0) ||
+    (loadflow.value && statusLgnth.value && backShow.value == 0) ||
+    (!loadflow.value &&
+      statusLgnth.value &&
+      backShow.value == 0 &&
+      smartPortflow.value)
+  ) {
+    // alert(111);
+    // 负数家庭负载50k 75-> -215 流动
+    if (
+      plantDetailsList.value?.meterPower < 0 &&
+      acflow.value == 1 &&
+      loadflow.value
+    ) {
+      // alert(1);
+      homeLoad.animation.show = true;
+      homeLoad.animation.needReverse = true;
+      homeLoad.animation.begin = "5s";
+      // homeLoad.animation.isLoop = true;
+    }
+    // 215 -75 020510060021109006
+    if (
+      plantDetailsList.value?.meterPower < 0 &&
+      acflow.value == 0 &&
+      acctflow.value == 0 &&
+      loadflow.value
+    ) {
+      // alert(2);
+      homeLoad.animation.show = true;
+      homeLoad.animation.needReverse = false;
+      homeLoad.animation.begin = undefined;
+      // homeLoad.animation.isLoop = true;
+    }
+    // -215 -> 75
+    if (
+      plantDetailsList.value?.meterPower > 0 &&
+      acflow.value == 0 &&
+      loadflow.value
+    ) {
+      // alert(3);
+      homeLoad.show = true;
+      homeLoad.animation.show = true;
+      homeLoad.animation.begin = "5s";
+      // homeLoad.animation.isLoop = true;
+    }
+    // -75 -> 215
+    if (
+      plantDetailsList.value?.meterPower > 0 &&
+      acflow.value == 1 &&
+      loadflow.value
+    ) {
+      // alert(4);
+      homeLoad.show = true;
+      homeLoad.animation.show = true;
+      homeLoad.animation.begin = "5s";
+      // homeLoad.animation.isLoop = true;
+    }
+    // -75 -> 215
+    if (
+      plantDetailsList.value?.meterPower > 0 &&
+      acflow.value == 3 &&
+      loadflow.value
+    ) {
+      // alert(5);
+      homeLoad.show = true;
+      homeLoad.animation.show = true;
+      homeLoad.animation.begin = "5s";
+      // homeLoad.animation.isLoop = true;
+    }
+  }
+
+  // 7.充电桩
+  chargingStation.show = plantDetailsList.value.isLinkCs == 1;
+  chargingStation.power = plantDetailsList.value.csAcTotalPower || 0;
+  chargingStation.unit = plantDetailsList.value.toKw ? "kW" : "W";
+  chargingStation.name = t("lang.chargingpile");
+  if (
+    csflow.value &&
+    statusLgnth.value &&
+    csdis.value &&
+    plantDetailsList.value?.isLinkCs == 1
+  ) {
+    if (loadflow.value) {
+      chargingStation.animation.show = true;
+      chargingStation.animation.dur = "2.5s";
+      chargingStation.animation.begin =
+        parseInt(grid.animation.dur.slice(0)) +
+        parseInt(homeLoad.animation.dur.slice(0)) / 2 +
+        "s";
+    }
+  }
+  if (
+    !csflow.value &&
+    statusLgnth.value &&
+    plantDetailsList.value?.isLinkCs == 1
+  ) {
+    chargingStation.animation.show = false;
+    chargingStation.path.stroke = flowLayoutData.colors.online;
+  }
+  if (!statusLgnth.value && plantDetailsList.value?.isLinkCs == 1) {
+    chargingStation.animation.show = false;
+    chargingStation.path.stroke = flowLayoutData.colors.offline;
+  }
+
+  // 处理IV右侧单条线（有家庭负载）时右侧是单独的线段构成，动画流动次序
+  // svg动画不管条件如何都会自动执行一次
+  nextTick(() => {
+    setTimeout(() => {
+      let homeLoadAnim = document.getElementById(homeLoad.animation.id);
+      let homeLoadCircle = document.getElementById(
+        homeLoad.animation.id + "Circle"
+      );
+      let gridAnim = document.getElementById(grid.animation.id);
+      let gridCircle = document.getElementById(grid.animation.id + "Circle");
+      let centerIVAnim = document.getElementById(centerIV.animation.id);
+      let centerIVCircle = document.getElementById(
+        centerIV.animation.id + "Circle"
+      );
+      let csAnim = document.getElementById(chargingStation.animation.id);
+      let csAnimCircle = document.getElementById(
+        chargingStation.animation.id + "Circle"
+      );
+      [homeLoad, grid, centerIV, chargingStation].forEach((item) => {
+        // console.log(item.animation.begin);
+        if (item.animation.begin && item.animation.begin.slice(0) != 0) {
+          document.getElementById(
+            item.animation.id + "Circle"
+          ).style.opacity = 0;
+          let animEl = document.getElementById(item.animation.id);
+          animEl &&
+            animEl.addEventListener("beginEvent", () => {
+              document.getElementById(
+                item.animation.id + "Circle"
+              ).style.opacity = 1;
+            });
+        }
+      });
+      let isCenterIVAnimReverse = centerIV.animation.needReverse;
+      let isGridAnimReverse = grid.animation.needReverse;
+      let isHomeLoadAnimReverse = homeLoad.animation.needReverse;
+      console.log(
+        homeLoadAnim,
+        homeLoadCircle,
+        gridAnim,
+        gridCircle,
+        centerIVAnim,
+        centerIVCircle,
+        isCenterIVAnimReverse,
+        isGridAnimReverse,
+        isHomeLoadAnimReverse
+      );
+      let isIVStart = false,
+        isGridStart = false,
+        isHomeLoadStart = false;
+      let animFns = {
+        ivStart() {
+          if (isIVStart) return;
+          // console.log("ivstart---");
+          centerIVCircle ? (centerIVCircle.style.opacity = "1") : "";
+          centerIVAnim.beginElement();
+          isIVStart = true;
+        },
+        ivStop() {
+          isIVStart = false;
+          // console.log("ivstop---");
+          centerIVCircle ? (centerIVCircle.style.opacity = "0") : "";
+        },
+        gridStart() {
+          if (isGridStart) return;
+          gridCircle ? (gridCircle.style.opacity = "1") : "";
+          gridAnim.beginElement();
+          isGridStart = true;
+        },
+        gridStop() {
+          isGridStart = false;
+          // console.log("gridStop---");
+          gridCircle ? (gridCircle.style.opacity = "0") : "";
+        },
+        homeLoadStart() {
+          if (isHomeLoadStart) return;
+          homeLoadCircle ? (homeLoadCircle.style.opacity = "1") : "";
+          homeLoadAnim.beginElement();
+          isHomeLoadStart = true;
+        },
+        homeLoadStop() {
+          // console.log("homeLoadStop---");
+          isHomeLoadStart = false;
+          homeLoadCircle ? (homeLoadCircle.style.opacity = "0") : "";
+        },
+      };
+      if (centerIVAnim) {
+        if (!isCenterIVAnimReverse) {
+          centerIVAnim.addEventListener("endEvent", (e) => {
+            animFns.ivStop();
+            if (gridAnim && isGridAnimReverse) {
+              // animFns.gridStart();  // svg不管条件如何都会自动执行一次
+              gridAnim.addEventListener("endEvent", () => {
+                animFns.gridStop();
+                animFns.ivStart();
+              });
+            }
+            if (homeLoadAnim && isHomeLoadAnimReverse) {
+              // animFns.homeLoadStart();
+              homeLoadAnim.addEventListener("endEvent", () => {
+                animFns.homeLoadStop();
+                animFns.ivStart();
+              });
+            }
+          });
+        } else {
+          centerIVAnim.addEventListener("endEvent", () => {
+            animFns.ivStop();
+            if (gridAnim && !isGridAnimReverse) {
+              // animFns.gridStart();
+              gridAnim.addEventListener("endEvent", () => {
+                animFns.gridStop();
+                animFns.ivStart();
+              });
+            }
+            if (homeLoadAnim && !isHomeLoadAnimReverse) {
+              // animFns.homeLoadStart();
+              homeLoadAnim.addEventListener("endEvent", () => {
+                animFns.homeLoadStop();
+                animFns.ivStart();
+              });
+            }
+          });
+        }
+      }
+      if (gridAnim) {
+        if (!isGridAnimReverse) {
+          gridAnim.addEventListener("endEvent", (e) => {
+            animFns.gridStop();
+            if (centerIVAnim && isCenterIVAnimReverse) {
+              // animFns.ivStart();
+              centerIVAnim.addEventListener("endEvent", () => {
+                animFns.ivStop();
+                animFns.gridStart();
+              });
+            }
+            if (homeLoadAnim && isHomeLoadAnimReverse) {
+              // animFns.homeLoadStart();
+              homeLoadAnim.addEventListener("endEvent", () => {
+                animFns.homeLoadStop();
+                animFns.gridStart();
+              });
+            }
+          });
+        } else {
+          gridAnim.addEventListener("endEvent", () => {
+            animFns.gridStop();
+            if (centerIVAnim && !isCenterIVAnimReverse) {
+              // animFns.ivStart();
+              centerIVAnim.addEventListener("endEvent", () => {
+                animFns.ivStop();
+                animFns.gridStart();
+              });
+            }
+            if (homeLoadAnim && !isHomeLoadAnimReverse) {
+              // animFns.homeLoadStart();
+              homeLoadAnim.addEventListener("endEvent", () => {
+                animFns.homeLoadStop();
+                animFns.gridStart();
+              });
+            }
+          });
+        }
+      }
+      if (homeLoadAnim) {
+        if (!isHomeLoadAnimReverse) {
+          homeLoadAnim.addEventListener("endEvent", (e) => {
+            animFns.homeLoadStop();
+            if (centerIVAnim && isCenterIVAnimReverse) {
+              // animFns.ivStart();
+              centerIVAnim.addEventListener("endEvent", () => {
+                animFns.ivStop();
+                animFns.homeLoadStart();
+              });
+            }
+            if (gridAnim && isGridAnimReverse) {
+              // animFns.gridStart();
+              gridAnim.addEventListener("endEvent", () => {
+                animFns.gridStop();
+                animFns.homeLoadStart();
+              });
+            }
+          });
+        } else {
+          homeLoadAnim.addEventListener("endEvent", () => {
+            animFns.homeLoadStop();
+            if (gridAnim && !isGridAnimReverse) {
+              // animFns.gridStart();
+              gridAnim.addEventListener("endEvent", () => {
+                animFns.gridStop();
+                animFns.homeLoadStart();
+              });
+            }
+            if (centerIVAnim && !isCenterIVAnimReverse) {
+              // animFns.ivStart();
+              centerIVAnim.addEventListener("endEvent", () => {
+                animFns.ivStop();
+                animFns.homeLoadStart();
+              });
+            }
+          });
+        }
+      }
+
+      // 充电桩实时坐标获取不到，直接通过时间计算控制往复
+      if (csAnim) {
+        csAnim.addEventListener("beginEvent", (e) => {
+          csAnimCircle ? (csAnimCircle.style.opacity = "1") : "";
+        });
+        csAnim.addEventListener("endEvent", (e) => {
+          csAnimCircle ? (csAnimCircle.style.opacity = "0") : "";
+          setTimeout(() => {
+            csAnim ? csAnim.beginElement() : "";
+          }, (parseInt(grid.animation.dur.slice(0)) + parseInt(homeLoad.animation.dur.slice(0)) / 2) * 1000);
+        });
+      }
+    }, 100);
+  });
+};
+/**
+ * 链式执行 SVG 动画
+ * @param {Array} animations - 动画配置数组
+ * @param {string} animations[].animId - SVG动画元素ID
+ * @param {Function} [animations[].onEnd] - 当前动画结束时的回调
+ * @param {string} [animations[].targetId] - 需要控制显隐的元素ID
+ * @param {boolean} [animations[].hideTarget] - 是否在动画结束时隐藏目标
+ */
+function runSVGAnimChain(animations) {
+  console.log(animations);
+
+  let currentIndex = 0;
+
+  function playNext() {
+    if (currentIndex >= animations.length) {
+      // currentIndex = 0; // 循环播放
+      // 如需单次播放，请删除上一行并 return
+    }
+
+    const { animId, onEnd, targetId, hideTarget } = animations[currentIndex];
+    const animElement = document.getElementById(animId);
+
+    if (!animElement) return;
+
+    // 显示当前目标元素（如果有）
+    if (targetId) {
+      document.getElementById(targetId).style.opacity = "1";
+    }
+    // 监听动画结束
+    const handleEnd = () => {
+      animElement.removeEventListener("endEvent", handleEnd);
+
+      // 隐藏目标元素（如果需要）
+      if (targetId && hideTarget) {
+        document.getElementById(targetId).style.opacity = "0";
+      }
+      // 执行自定义回调
+      onEnd?.();
+      // 播放下一个动画
+      currentIndex++;
+      playNext();
+    };
+
+    animElement.addEventListener("endEvent", handleEnd);
+    animElement.beginElement(); // 开始动画
+  }
+  // 启动第一个动画
+  playNext();
+}
+
+// 有家庭负载时IV、grid、homeLoad、CS的流动动画步骤控制
+// 只控制每条path的动画次序，动画显示与否由上面的逻辑控制，这里假设所有动画都显示
+function animationControl(which) {
+  // nextTick(() => {
+  // console.log(which);
+  let { IVToRight, rightToIV, gridToHomeLoad, IVGridToHomeLoad } =
+    animationSituations;
+  let { centerIV, grid, homeLoad, chargingStation } = flowElementsData;
+  let getEl = (id) => document.querySelector("#" + id);
+  // document
+  //   .getElementById(grid.animation.id)
+  //   .addEventListener("endEvent", (e) => {
+  //     console.log(e);
+  //   });
+  // // 配置动画链
+  // runSVGAnimChain([
+  //   {
+  //     animId: centerIV.animation.id,
+  //     targetId: centerIV.animation.id + "Circle",
+  //     hideTarget: true,
+  //     onEnd: () => {
+  //       console.log("路径1动画结束");
+
+  //       runSVGAnimChain([
+  //         {
+  //           animId: grid.animation.id,
+  //           targetId: grid.animation.id + "Circle",
+  //           hideTarget: true,
+  //           onEnd: () => {
+  //             console.log("路径2动画结束");
+  //             runSVGAnimChain([
+  //               {
+  //                 animId: centerIV.animation.id,
+  //                 targetId: centerIV.animation.id + "Circle",
+  //                 hideTarget: true,
+  //                 onEnd: () => {
+  //                   console.log("路径1动画结束");
+  //                 },
+  //               },
+  //             ]);
+  //           },
+  //         },
+  //         {
+  //           animId: homeLoad.animation.id,
+  //           targetId: homeLoad.animation.id + "Circle",
+  //           hideTarget: true,
+  //           onEnd: () => console.log("路径2动画结束"),
+  //         },
+  //       ]);
+  //     },
+  //   },
+  // ]);
+  // if (which == IVToRight) {
+  //   handleEnd(
+  //     centerIV.animation.id,
+  //     centerIV.animation.id + "Circle",
+  //     grid.animation.id,
+  //     grid.animation.id + "Circle"
+  //   );
+  //   // handleEnd(
+  //   //   centerIV.animation.id,
+  //   //   centerIV.animation.id + "Circle",
+  //   //   homeLoad.animation.id,
+  //   //   homeLoad.animation.id + "Circle"
+  //   // );
+  // }
+  // });
+}
+// function handleEnd(currentAnimId, currentDotId, nextAnimId, nextDotId) {
+//   console.log(currentAnimId, currentDotId, nextAnimId, nextDotId);
+//   // 隐藏当前圆点
+//   document.getElementById(currentDotId).style.opacity = "0";
+//   // 播放下一个动画
+//   document.getElementById(nextAnimId).beginElement();
+//   // 显示下一个圆点（需根据 nextAnimId 对应的圆点设置）
+//   document.getElementById(nextDotId).style.opacity = "1";
+// }
+</script>
+<script>
+
+[
+    {
+        "id": "centerIV",
+        "show": true,
+        "name": "逆变器",
+        "point": {
+            "x": 530,
+            "y": 125
+        },
+        "img": {
+            "src": "http://localhost:5174/src/assets/img/liuxiangtu/ni.png",
+            "w": 97,
+            "h": 87,
+            "offset": [
+                "-w/2",
+                "-h/2"
+            ]
+        },
+        "alarmImg": {
+            "src": "http://localhost:5174/src/assets/img/liuxiangtu/ala.png",
+            "w": 35,
+            "h": 30
+        },
+        "path": {
+            "id": "centerIV-path",
+            "anotherEndpoint": {
+                "x": 984,
+                "y": 125
+            },
+            "singleLineEndPoint": "rightVLineCenter",
+            "singleLineShow": true,
+            "mode": "v",
+            "stroke": "#09a9f0",
+            "line": "M578.5,125 L578.5,125 L984,125",
+            "lineArr": [
+                [
+                    578.5,
+                    125
+                ],
+                [
+                    578.5,
+                    125
+                ],
+                [
+                    984,
+                    125
+                ]
+            ]
+        },
+        "animation": {
+            "id": "centerIVAnimation",
+            "show": true,
+            "dur": "5s",
+            "needReverse": false,
+            "isLoop": false
+        },
+        "layoutXY": {
+            "x": 481.5,
+            "y": 81.5
+        },
+        "connectionPoints": {
+            "leftTop": {
+                "x": 481.5,
+                "y": 103.25
+            },
+            "leftCenter": {
+                "x": 481.5,
+                "y": 125
+            },
+            "leftBottom": {
+                "x": 481.5,
+                "y": 146.75
+            },
+            "topCenter": {
+                "x": 530,
+                "y": 81.5
+            },
+            "bottomCenter": {
+                "x": 530,
+                "y": 168.5
+            },
+            "rightTop": {
+                "x": 578.5,
+                "y": 103.25
+            },
+            "rightCenter": {
+                "x": 578.5,
+                "y": 125
+            },
+            "rightBottom": {
+                "x": 578.5,
+                "y": 146.75
+            }
+        }
+    },
+    {
+        "id": "pv",
+        "show": true,
+        "name": "PV",
+        "power": "255",
+        "unit": "W",
+        "point": {
+            "x": 60,
+            "y": 10
+        },
+        "img": {
+            "show": true,
+            "src": "http://localhost:5174/src/assets/img/liuxiangtu/pv.png",
+            "w": 32,
+            "h": 38,
+            "offset": []
+        },
+        "path": {
+            "id": "pv-path",
+            "line": "M76,48 L76,103.25 L481.5,103.25",
+            "anotherEndpoint": {
+                "x": 481.5,
+                "y": 103.25
+            },
+            "mode": "v",
+            "stroke": "#09a9f0",
+            "lineArr": [
+                [
+                    76,
+                    48
+                ],
+                [
+                    76,
+                    103.25
+                ],
+                [
+                    481.5,
+                    103.25
+                ]
+            ]
+        },
+        "animation": {
+            "id": "pvAnimation",
+            "show": true,
+            "dur": "5s",
+            "needReverse": false,
+            "isLoop": true
+        },
+        "layoutXY": {
+            "x": 60,
+            "y": 10
+        }
+    },
+    {
+        "id": "battery",
+        "show": true,
+        "name": "电池放电",
+        "power": 43,
+        "unit": "W",
+        "leftText": {
+            "top": {
+                "show": false,
+                "value": 0,
+                "unit": "V"
+            },
+            "bottom": {
+                "show": true,
+                "value": "100",
+                "unit": "%"
+            }
+        },
+        "point": {
+            "x": 60,
+            "y": 240
+        },
+        "img": {
+            "show": true,
+            "src": "http://localhost:5174/src/assets/img/liuxiangtu/dianchi.png",
+            "w": 26,
+            "h": 32,
+            "offset": [
+                "-h"
+            ]
+        },
+        "path": {
+            "id": "battery-path",
+            "line": "M76,208 L76,146.75 L481.5,146.75",
+            "mode": "v",
+            "anotherEndpoint": {
+                "x": 481.5,
+                "y": 146.75
+            },
+            "stroke": "#09a9f0",
+            "lineArr": [
+                [
+                    76,
+                    208
+                ],
+                [
+                    76,
+                    146.75
+                ],
+                [
+                    481.5,
+                    146.75
+                ]
+            ]
+        },
+        "animation": {
+            "id": "batteryAnimation",
+            "show": true,
+            "dur": "5s",
+            "needReverse": false,
+            "isLoop": true
+        },
+        "layoutXY": {
+            "x": 60,
+            "y": 208
+        }
+    },
+    {
+        "id": "smartLoad",
+        "show": false,
+        "name": "智能负载",
+        "power": 0,
+        "unit": "W",
+        "point": {
+            "x": 530,
+            "y": 10
+        },
+        "img": {
+            "show": false,
+            "src": "http://localhost:5174/src/assets/img/liuxiangtu/dengpao.png",
+            "w": 24,
+            "h": 32,
+            "offset": [
+                "-w/2"
+            ]
+        },
+        "smartPointImg": {
+            "show": false,
+            "src": "http://localhost:5174/src/assets/img/liuxiangtu/smartport.png",
+            "w": 32,
+            "h": 32,
+            "offset": [
+                "-w/2"
+            ]
+        },
+        "microIVImg": {
+            "show": false,
+            "src": "http://localhost:5174/src/assets/img/liuxiangtu/mic.png",
+            "w": 40,
+            "h": 32,
+            "offset": [
+                "-w/2"
+            ]
+        },
+        "generatorImg": {
+            "show": false,
+            "src": "http://localhost:5174/src/assets/img/liuxiangtu/youji.png",
+            "w": 36,
+            "h": 32,
+            "offset": [
+                "-w/2"
+            ]
+        },
+        "path": {
+            "id": "smartLoad-path",
+            "line": "M530,42 L530,42 L530,81.5",
+            "anotherEndpoint": {
+                "x": 530,
+                "y": 81.5
+            },
+            "mode": "auto",
+            "stroke": "#09a9f0",
+            "lineArr": [
+                [
+                    530,
+                    42
+                ],
+                [
+                    530,
+                    42
+                ],
+                [
+                    530,
+                    81.5
+                ]
+            ]
+        },
+        "animation": {
+            "is": "smartLoadAnimation",
+            "show": false,
+            "dur": "1.5s",
+            "needReverse": false,
+            "isLoop": true
+        },
+        "layoutXY": {
+            "x": 518,
+            "y": 10
+        }
+    },
+    {
+        "id": "backupLoad",
+        "show": true,
+        "name": "备用负载",
+        "power": "0",
+        "unit": "W",
+        "point": {
+            "x": 530,
+            "y": 240
+        },
+        "img": {
+            "show": true,
+            "src": "http://localhost:5174/src/assets/img/liuxiangtu/xiang.png",
+            "w": 39,
+            "h": 33,
+            "offset": [
+                "-w/2",
+                "-h"
+            ]
+        },
+        "path": {
+            "id": "backupLoad-path",
+            "line": "M530,207 L530,207 L530,168.5",
+            "anotherEndpoint": {
+                "x": 530,
+                "y": 168.5
+            },
+            "mode": "auto",
+            "stroke": "#09a9f0",
+            "lineArr": [
+                [
+                    530,
+                    207
+                ],
+                [
+                    530,
+                    207
+                ],
+                [
+                    530,
+                    168.5
+                ]
+            ]
+        },
+        "animation": {
+            "id": "backupLoadAnimation",
+            "show": false,
+            "dur": "1.5s",
+            "needReverse": false,
+            "isLoop": true
+        },
+        "layoutXY": {
+            "x": 510.5,
+            "y": 207
+        }
+    },
+    {
+        "id": "grid",
+        "show": true,
+        "name": "馈电",
+        "power": 146,
+        "unit": "W",
+        "textPosition": "left",
+        "point": {
+            "x": 1000,
+            "y": 10
+        },
+        "img": {
+            "show": true,
+            "src": "http://localhost:5174/src/assets/img/liuxiangtu/dianta.png",
+            "w": 32,
+            "h": 38,
+            "offset": [
+                "-w"
+            ]
+        },
+        "meterImg": {
+            "src": "http://localhost:5174/src/assets/img/liuxiangtu/biaoxin.png",
+            "w": 18,
+            "h": 21,
+            "offset": [],
+            "show": true
+        },
+        "path": {
+            "id": "grid-path",
+            "line": "M984,48 L984,125 L984,125",
+            "anotherEndpoint": {
+                "x": 984,
+                "y": 125
+            },
+            "singleLineEndPoint": "rightVLineCenter",
+            "mode": "v",
+            "stroke": "#09a9f0",
+            "lineArr": [
+                [
+                    984,
+                    48
+                ],
+                [
+                    984,
+                    125
+                ],
+                [
+                    984,
+                    125
+                ]
+            ]
+        },
+        "animation": {
+            "id": "gridAnimation",
+            "show": true,
+            "dur": "5s",
+            "needReverse": true,
+            "isLoop": false,
+            "begin": "5s"
+        },
+        "layoutXY": {
+            "x": 968,
+            "y": 10
+        }
+    },
+    {
+        "id": "homeLoad",
+        "show": true,
+        "name": "家庭负载",
+        "power": 176,
+        "unit": "W",
+        "textPosition": "left",
+        "point": {
+            "x": 1000,
+            "y": 240
+        },
+        "img": {
+            "show": true,
+            "src": "http://localhost:5174/src/assets/img/liuxiangtu/wu.png",
+            "w": 23,
+            "h": 33,
+            "offset": [
+                "-w",
+                "-h"
+            ]
+        },
+        "twoWayBulbImg": {
+            "show": false,
+            "src": "http://localhost:5174/src/assets/img/liuxiangtu/youdeng.png",
+            "w": 13,
+            "h": 16,
+            "offset": [
+                "-w",
+                "-h"
+            ]
+        },
+        "path": {
+            "id": "homeLoad-path",
+            "line": "M984,207 L984,125 L984,125",
+            "anotherEndpoint": {
+                "x": 984,
+                "y": 125
+            },
+            "singleLineEndPoint": "rightVLineCenter",
+            "mode": "v",
+            "stroke": "#09a9f0",
+            "lineArr": [
+                [
+                    984,
+                    207
+                ],
+                [
+                    984,
+                    125
+                ],
+                [
+                    984,
+                    125
+                ]
+            ]
+        },
+        "animation": {
+            "id": "homeLoadAnimation",
+            "show": true,
+            "dur": "5s",
+            "needReverse": true,
+            "isLoop": false,
+            "begin": "5s"
+        },
+        "layoutXY": {
+            "x": 977,
+            "y": 207
+        }
+    },
+    {
+        "id": "chargingStation",
+        "show": false,
+        "name": "充电桩",
+        "power": "0",
+        "unit": "W",
+        "textPosition": "left",
+        "point": {
+            "x": 850,
+            "y": 166
+        },
+        "img": {
+            "show": true,
+            "src": "http://localhost:5174/src/assets/img/liuxiangtu/dianzhang.png",
+            "w": 36,
+            "h": 26,
+            "offset": [
+                "-h/2"
+            ]
+        },
+        "path": {
+            "id": "chargingStation-path",
+            "line": "M886,166 L886,166 L984,166",
+            "anotherEndpoint": {
+                "x": 984,
+                "y": 166
+            },
+            "singleLineEndPoint": "rightVLineBottomCenter",
+            "mode": "v",
+            "stroke": "#09a9f0",
+            "lineArr": [
+                [
+                    886,
+                    166
+                ],
+                [
+                    886,
+                    166
+                ],
+                [
+                    984,
+                    166
+                ]
+            ]
+        },
+        "animation": {
+            "id": "csAnimation",
+            "show": false,
+            "dur": "2.5s",
+            "needReverse": true,
+            "isLoop": false
+        },
+        "layoutXY": {
+            "x": 850,
+            "y": 153
+        }
+    }
+]
+</script>
+<style lang="scss">
+@keyframes blink {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+</style>
