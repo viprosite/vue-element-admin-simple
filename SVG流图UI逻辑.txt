@@ -1,5 +1,5 @@
 <template>
-  <div style="background: #fff; flex: 1">
+  <div style="background: #fff; height: 90%">
     <svg
       :viewBox="
         '0 0 ' + flowLayoutData.endPoint.x + ' ' + flowLayoutData.endPoint.y
@@ -17,7 +17,6 @@
           :y="flowElementsData.centerIV.layoutXY.y"
           :width="flowElementsData.centerIV.img.w"
           :height="flowElementsData.centerIV.img.h"
-          @click="alaShow"
         />
         <image
           v-if="plantDetailsList.faultStatus == 2"
@@ -35,6 +34,7 @@
           :width="flowElementsData.centerIV.alarmImg.w"
           :height="flowElementsData.centerIV.alarmImg.h"
           style="animation: blink 1.5s infinite"
+          class="cursor-pointer"
           @click="alaShow"
         />
         <path
@@ -50,12 +50,13 @@
           fill="none"
         />
         <circle
-          r="4"
+          :r="flowLayoutData.circleR"
           fill="#045F7F"
           :id="flowElementsData.centerIV.animation.id + 'Circle'"
           v-if="flowElementsData.centerIV.animation.show"
         >
           <animateMotion
+            fill="freeze"
             :dur="flowElementsData.centerIV.animation.dur"
             :begin="flowElementsData.centerIV.animation.begin ?? '0.001s'"
             repeatCount="0"
@@ -79,6 +80,8 @@
               :y="ele.layoutXY.y"
               :width="ele.img.w"
               :height="ele.img.h"
+              class="cursor-pointer"
+              @click="showCompar(ele)"
             />
             <image
               v-if="ele.id == 'grid' && ele.meterImg.show"
@@ -95,6 +98,8 @@
               :y="ele.layoutXY.y + 3"
               :width="ele.twoWayBulbImg.w"
               :height="ele.twoWayBulbImg.h"
+              class="cursor-pointer"
+              @click="showCompar(ele)"
             />
           </g>
           <g>
@@ -171,11 +176,12 @@
           />
           <circle
             :id="ele.animation.id + 'Circle'"
-            r="4"
+            :r="flowLayoutData.circleR"
             fill="#045F7F"
             v-if="ele.animation.show"
           >
             <animateMotion
+              fill="freeze"
               :dur="ele.animation.dur"
               :begin="ele.animation.begin ?? '0.001s'"
               :repeatCount="ele.animation.isLoop ? 'indefinite' : 0"
@@ -190,18 +196,24 @@
       </g>
     </svg>
   </div>
+  <comparisonStations
+    :deviceSn="getflowData.deviceSn"
+    :plantId="getflowData.plantId"
+    :icons="icons"
+    @close="closeDraw"
+    :append-to-body="true"
+    ref="comparison"
+    v-if="isShowComparison"
+  ></comparisonStations>
 </template>
 <script setup>
 // import * as echarts from "echarts";
 import i18n from "@/i18n/i18n.js";
 const { t } = i18n.global;
-import { getenergyflow, plantDevice } from "@/api/api";
-import { computed, nextTick, reactive, watch } from "vue";
-import { flow } from "lodash";
-import { _ } from "lodash";
+import { getenergyflow } from "@/api/api";
+import comparisonStations from "./comparisonStations";
 const display = ref(false);
 const props = defineProps([
-  "deviceSnNull",
   "plantIDshow",
   "getflowData",
   "isHas50k",
@@ -209,11 +221,12 @@ const props = defineProps([
   "alarmShow",
 ]);
 const emit = defineEmits(["alarmShow"]);
+const scale = ref(0);
 const plantDetailsList = ref([]);
 const pvflow = ref(false); //pv流动
 const youflow = ref(false); //油机流动
 const youdis = ref(false); //油机显示
-const youdis1 = ref(false); //油机显示
+const youdis1 = ref(false); //智能负载显示
 const acflow = ref(3); //电网流动0往逆变器流动1往电网流动
 const batteryflow = ref(3); //电池流动0往逆变器流动1往电池流动
 const smartPortflow = ref(false); //智能负载流动
@@ -227,19 +240,33 @@ const backShow = ref(0);
 const baiVlog = ref(false);
 const bmsShow = ref(false);
 const kui = ref(3);
-const acinpowr = ref();
 const acctflow = ref(3); // 馈电取电  0向上，1向下
+const acinpowr = ref();
+const pvDataShow = ref(false); // pv数据显示
+const batteryDataShow = ref(false); // 电池数据显示
+const gridDataShow = ref(false); // 电网数据显示
+const standbyShow = ref(false); // 备用负载数据显示
+const householdShow = ref(false); // 家庭负载数据显示
+const dynamoShow = ref(false); // 发电机数据显示
+const isHasSn = ref(); // 是否有SN
 const negDirection = ref(false);
+const isShowComparison = ref(false); // 显示比对结果
+const comparison = ref();
+const icons = ref(""); // 图标
 const ctPowerText = ref(0);
+const isSinglePlant = ref(false); // 是否为单个电站
 const smartPortIcon = ref(false); // 智能端口显示
 const smartPortFlowDir = ref(3); // 智能端口流动方向，3为静止，1向上，2向下
 const microInverse = ref(false); // 微逆图标显示
 const microFlowDir = ref(3); // 微逆流动方向，3为静止，1向上，2向下
+
 const calcLayoutFinish = ref(false);
 // 逆变器图标右侧是否是只有中间一条线（对应并离网）；右侧分开两条线对应离网
 const isIVRightSingleLine = ref(false);
 // 流向图整体布局信息
 const flowLayoutData = reactive({
+  // 流动圆点半径 默认给0初始时不显示 否则没有cxcy会显示到左上角闪烁
+  circleR: 0,
   // 在线离线线条颜色
   colors: {
     online: "#09a9f0",
@@ -271,10 +298,9 @@ const flowLayoutData = reactive({
  *        则其路径起点x坐标直接用前一个点的路径起点x值，保证两者的线路竖直方向在一条直线上
  * animation：线路上流动动画；动画元素id、是否显示show、动画时长dur、是否循环动画isLoop、是否逆向needReverse
  *
- * rightVLineCenter、rightVLineBottomCenter都是特殊情况下某些元素连接的另一端点
+ * rightVLineCenter、rightVLineBottomCenter都是特殊情况下某些元素不与另一元素直接相连时而连接的另一端点
  *
- *
- * ！！！ 遗漏逻辑：如果显示的图标img是动态变化的，图标变化后需要重新用calcLayoutXY计算当前实际显示的图标布局位置
+ * ！！！ 遗漏逻辑：如果显示的图标img是动态变化的，图标变化后需要重新用calcLayoutXY计算当前实际显示的图标布局位置！！！
  *
  * 多条线段的动画流控制：
  * 0. animateMotion动画拿不到circle的实时坐标
@@ -288,6 +314,10 @@ const flowLayoutData = reactive({
  *    结合当前元素A是否反向动画以及与其连接的另一些些元素BC的动画是否反向综合判断该元素A的动画结束后该让哪一个元素开始动画
  *    ！！！注意SVG动画至少都会执行一次，所以该元素A动画结束事件中不需要代码开始另一元素的动画(其会自己开始一次)，只需要监听另一元素的endEvent事件，在事件回调中手动重新开始该元素A动画IVAnim.beginElement();
  * 5. 如果有的元素有固定的动画开始延迟，在拿不到与其关联的路径动画circle坐标情况下，可以直接用setTimeout控制在固定延时后开始动画
+ *
+ *加载后圆点左上角闪烁问题优化：
+ * circle半径默认为0，svg布局后再赋值为5；有延时动画的圆点一开始隐藏监听到动画开始再显示；动画结束圆点显示到结束位置（fill="freeze"）。
+ *
  */
 const flowElementsData = reactive({
   // 中心逆变器：注意先计算出layoutXY，在计算connectionPoints各个坐标(依赖layoutXY)
@@ -330,6 +360,7 @@ const flowElementsData = reactive({
     name: "PV",
     power: 0,
     unit: "kW",
+    // iconKey: "BLOCK_PV",
     point: {
       x: flowLayoutData.originPoint.x + flowLayoutData.gap + 50,
       y: flowLayoutData.originPoint.y + flowLayoutData.gap,
@@ -340,6 +371,7 @@ const flowElementsData = reactive({
       w: 32,
       h: 38,
       offset: [],
+      iconKey: "BLOCK_PV",
     },
     // layoutXY: calcLayoutXY(pv.point, pv.img),
     path: {
@@ -363,6 +395,7 @@ const flowElementsData = reactive({
     name: "电池",
     power: 0,
     unit: "kW",
+    // iconKey: "BLOCK_BP",
     leftText: {
       top: {
         show: false,
@@ -385,6 +418,7 @@ const flowElementsData = reactive({
       w: 26,
       h: 32,
       offset: ["-h"],
+      iconKey: "BLOCK_BP",
     },
     path: {
       id: "battery-path",
@@ -408,6 +442,12 @@ const flowElementsData = reactive({
     name: "智能负载",
     power: 0,
     unit: "kW",
+    // iconKey: {
+    //   bulb: "BLOCK_ICT_L",
+    //   generator: "BLOCK_GEN",
+    //   smartPort: "BLOCK_IT_P",
+    //   microIV: "BLOCK_MI",
+    // },
     point: {
       x: flowLayoutData.endPoint.x / 2,
       y: flowLayoutData.originPoint.y + flowLayoutData.gap,
@@ -418,6 +458,7 @@ const flowElementsData = reactive({
       w: 24,
       h: 32,
       offset: ["-w/2"],
+      iconKey: "bulb",
     },
     smartPointImg: {
       show: false,
@@ -425,13 +466,15 @@ const flowElementsData = reactive({
       w: 32,
       h: 32,
       offset: ["-w/2"],
+      iconKey: "smartPort",
     },
     microIVImg: {
       show: false,
       src: `${getImageUrl("mic.png")}`,
-      w: 40,
+      w: 60,
       h: 32,
       offset: ["-w/2"],
+      iconKey: "microIV",
     },
     generatorImg: {
       show: false,
@@ -439,6 +482,7 @@ const flowElementsData = reactive({
       w: 36,
       h: 32,
       offset: ["-w/2"],
+      iconKey: "generator",
     },
     path: {
       id: "smartLoad-path",
@@ -461,6 +505,7 @@ const flowElementsData = reactive({
     name: "备用负载",
     power: 0,
     unit: "kW",
+    // iconKey: "BLOCK_BL",
     point: {
       x: flowLayoutData.endPoint.x / 2,
       y: flowLayoutData.endPoint.y - flowLayoutData.gap,
@@ -471,6 +516,7 @@ const flowElementsData = reactive({
       w: 39,
       h: 33,
       offset: ["-w/2", "-h"],
+      iconKey: "BLOCK_BL",
     },
     path: {
       id: "backupLoad-path",
@@ -493,6 +539,7 @@ const flowElementsData = reactive({
     name: "电网",
     power: 0,
     unit: "kW",
+    // iconKey: "BLOCK_AC",
     textPosition: "left",
     point: {
       x: flowLayoutData.endPoint.x - flowLayoutData.gap - 50,
@@ -504,6 +551,7 @@ const flowElementsData = reactive({
       w: 32,
       h: 38,
       offset: ["-w"],
+      iconKey: "BLOCK_AC",
     },
     meterImg: {
       src: `${getImageUrl("biaoxin.png")}`,
@@ -534,6 +582,7 @@ const flowElementsData = reactive({
     name: "家庭负载",
     power: 0,
     unit: "kW",
+    // iconKey: { homeLoad: "BLOCK_HL", bulb: "BLOCK_ICT_L" },
     textPosition: "left",
     point: {
       x: flowLayoutData.endPoint.x - flowLayoutData.gap - 50,
@@ -545,6 +594,7 @@ const flowElementsData = reactive({
       w: 23,
       h: 33,
       offset: ["-w", "-h"],
+      iconKey: "BLOCK_HL",
     },
     twoWayBulbImg: {
       show: false,
@@ -552,6 +602,7 @@ const flowElementsData = reactive({
       w: 13,
       h: 16,
       offset: ["-w", "-h"],
+      iconKey: "BLOCK_ICT_L",
     },
     path: {
       id: "homeLoad-path",
@@ -634,17 +685,6 @@ const flowElementsData = reactive({
     // y: (flowLayoutData.endPoint.y / 4) * 3,
   },
 });
-// IV右侧单条线时，右侧都是单独线，独立控制每条path的动画次序，可能出现的情况
-// IVToRight从逆变器流向右侧,IV流向右侧隐藏circle，开始grid/homeLoad，结束后IV再次开始
-// rightToIV grid流向逆变器,grid流向右侧中点隐藏circle，开始iv/homeLoad，结束后grid再次开始
-// gridToHomeLoad grid流向右侧中点隐藏circle，开始homeLoad，结束后grid再次开始
-//IVGridToHomeLoad iv和grid同时流动到右侧中点隐藏circlr，开始homeLoad，结束后grid再次开始
-const animationSituations = {
-  IVToRight: 1,
-  rightToIV: 2,
-  gridToHomeLoad: 3,
-  IVGridToHomeLoad: 4,
-};
 
 const renderFlowEls = computed(() => {
   return flowElementsData.elementNames
@@ -657,10 +697,11 @@ onMounted(() => {
   // 根据数据布局流图
   layoutFlow();
   getflow();
+  isHasSn.value = props.getflowData.deviceSn ? true : false;
 });
 
 function getImageUrl(name) {
-  return new URL(`../../../assets/img/liuxiangtu/${name}`, import.meta.url)
+  return new URL(`../../../../assets/img/liuxiangtu/${name}`, import.meta.url)
     .href;
 }
 // 根据计算后的数据布局流图
@@ -695,15 +736,19 @@ const layoutFlow = () => {
   function calcIVConnectionPoints(layoutXY, img) {
     let { x, y } = layoutXY;
     let { w, h } = img;
+    let shadowWidth = 5; // 图标阴影宽度
     return {
-      leftTop: { x, y: y + h / 4 },
-      leftCenter: { x, y: y + h / 2 },
-      leftBottom: { x, y: y + (3 / 4) * h },
-      topCenter: { x: x + w / 2, y },
-      bottomCenter: { x: x + w / 2, y: y + h },
-      rightTop: { x: x + w, y: y + h / 4 },
-      rightCenter: { x: x + w, y: y + h / 2 },
-      rightBottom: { x: x + w, y: y + (3 / 4) * h },
+      leftTop: { x: x + shadowWidth, y: y + h / 4 + shadowWidth + 3 },
+      leftCenter: { x: x + shadowWidth, y: y + h / 2 },
+      leftBottom: { x: x + shadowWidth, y: y + (3 / 4) * h - shadowWidth - 3 },
+      topCenter: { x: x + w / 2, y: y + shadowWidth },
+      bottomCenter: { x: x + w / 2, y: y + h - shadowWidth * 2 },
+      rightTop: { x: x + w - shadowWidth, y: y + h / 4 + shadowWidth + 3 },
+      rightCenter: { x: x + w - shadowWidth, y: y + h / 2 },
+      rightBottom: {
+        x: x + w - shadowWidth,
+        y: y + (3 / 4) * h - shadowWidth - 3,
+      },
     };
   }
   flowElementsData.centerIV.connectionPoints = calcIVConnectionPoints(
@@ -728,7 +773,7 @@ const layoutFlow = () => {
     flowElementsData.rightVLineBottomCenter.y;
   // 传入两点坐标生成连接线
   // point1:[]  point2:{x,y}  mode: h（horizontal 先横再纵） v（vertical 先纵再横）
-  function generatePath(point1, point2, mode = "auto") {
+  function generatePath(point1, point2, mode = "auto", id = "") {
     let [x1, y1] = point1;
     let { x: x2, y: y2 } = point2;
     let points = [];
@@ -802,6 +847,7 @@ const layoutFlow = () => {
       item.layoutXY.x + item.img.w / 2,
       item.layoutXY.y + item.img.h,
     ];
+
     // 如果是逆变器或充电桩，为图标右侧中心点
     if (item.id == "centerIV" || item.id == "chargingStation") {
       generatePathPoint1 = [
@@ -809,7 +855,10 @@ const layoutFlow = () => {
         item.layoutXY.y + item.img.h / 2,
       ];
     }
-    console.log("flowElementsData." + item.id + item.path.anotherEndpoint);
+    if (item.id == "centerIV") {
+      generatePathPoint1[0] -= 5;
+    }
+    // console.log("flowElementsData." + item.id + item.path.anotherEndpoint);
 
     item.path.anotherEndpoint =
       typeof item.path.anotherEndpoint == "string"
@@ -842,16 +891,16 @@ const alaShow = () => {
     emit("alarmShow");
   }
 };
-const getflow = () => {
-  console.log(props.plantList, props.getflowData, "props.deviceSnNull");
 
-  if (props.getflowData.deviceSn == null) {
-    return false;
-  }
+const getflow = () => {
   if (!props.getflowData.deviceSn && props.plantList.length !== 1) {
     baiVlog.value = false;
   } else {
     baiVlog.value = true;
+  }
+
+  if (!props.getflowData.deviceSn && props.plantList.length == 1) {
+    isSinglePlant.value = true;
   }
 
   display.value = false;
@@ -874,7 +923,6 @@ const getflow = () => {
       //   plantDetailsList.value.acTtlInPower = plantDetailsList.value.CtPower;
       // }
       // plantDetailsList.acTtlInPower > plantDetailsList.meterPower;
-
       plantDetailsList.value.acTtlInPower = Number(
         plantDetailsList.value.acTtlInPower
       );
@@ -922,7 +970,6 @@ const getflow = () => {
           )
       ) {
         pvflow.value = true;
-        flowElementsData.pv.animation.show = true;
       }
 
       // 判断智能负载,油机器显示
@@ -939,14 +986,6 @@ const getflow = () => {
       } else {
         youdis.value = false;
         youdis1.value = false;
-      }
-
-      if (plantDetailsList.value.smartPort == -1) {
-        smartPortIcon.value = true;
-      }
-
-      if (plantDetailsList.value.smartPort == 2) {
-        microInverse.value = true;
       }
 
       // 判断油机流动
@@ -990,15 +1029,6 @@ const getflow = () => {
         youflow.value = true;
       }
 
-      // 微逆流动
-      if (
-        plantDetailsList.value.microInvTotalPower !== null &&
-        Number(plantDetailsList.value.microInvTotalPower) >
-          Number(plantDetailsList.value.thMap.microInvTotalPower)
-      ) {
-        microFlowDir.value = 2;
-      }
-
       // 判断backup流动
       if (
         plantDetailsList.value.acTotalOutActPower !== null &&
@@ -1034,7 +1064,9 @@ const getflow = () => {
       }
 
       // OperM = 2&&DParEn=1&& MstSlv=0
-      //() 判断电网流动
+      //正值为取电，负值为馈电
+      // 取电功率>预定值时，4向下
+      // 馈电功率>预定值时，4向上
       if (plantDetailsList.value.cpShowType == 1) {
         if (
           plantDetailsList.value.ctPower !== null &&
@@ -1052,7 +1084,6 @@ const getflow = () => {
         ) {
           acctflow.value = 1;
         }
-        console.log(acctflow.value, "acctflow.value1");
       } else {
         if (
           plantDetailsList.value.acTtlInPower !== null &&
@@ -1070,9 +1101,7 @@ const getflow = () => {
         ) {
           acctflow.value = 0;
         }
-        console.log(acctflow.value, "acctflow.value2");
       }
-      console.log(acctflow.value, "acctflow.value");
 
       // 3号线流动逻辑
       if (plantDetailsList.value.cpShowType == 1) {
@@ -1092,7 +1121,7 @@ const getflow = () => {
       } else {
         if (acinpowr.value !== null && acinpowr.value < 0) {
           // 电网馈电
-          acflow.value = 0;
+          acflow.value = 0; // 右边
         } else if (acinpowr.value == null || acinpowr.value >= 0) {
           if (
             plantDetailsList.value.acTtlInPower !== null &&
@@ -1101,11 +1130,11 @@ const getflow = () => {
             let acTtlInPowerNum = Number(plantDetailsList.value.acTtlInPower); // 取电功率
             let meterPowerNum = Number(plantDetailsList.value.meterPower); // 并网测值
             if (acTtlInPowerNum < meterPowerNum) {
-              acflow.value = 0;
+              acflow.value = 0; // 右
             } else if (acTtlInPowerNum > meterPowerNum) {
-              acflow.value = 1;
+              acflow.value = 1; // 左
             } else {
-              acflow.value = 3;
+              acflow.value = 3; // 不流
             }
           } else {
             acflow.value = 3;
@@ -1189,7 +1218,7 @@ const getflow = () => {
         plantDetailsList.value.emsVoltage2
       );
 
-      // 补充逻辑，家庭负载为负值，流动方向为向右，并且电网不流动时候，线路均不流动
+      // 补充逻辑，智能负载为负值，流动方向为向右，并且电网不流动时候，线路均不流动
       if (
         smartPortflow.value == true &&
         plantDetailsList.value.meterPower !== null &&
@@ -1202,9 +1231,9 @@ const getflow = () => {
         }
         acflow.value = 3;
       }
-
       nextTick(() => {
         display.value = true;
+
         plantDetailsList.value.batteryCharging = Math.abs(
           plantDetailsList.value.batteryCharging
         );
@@ -1218,7 +1247,7 @@ const getflow = () => {
           plantDetailsList.value.acTtlInPower
         );
         ctPowerText.value = Math.abs(plantDetailsList.value.ctPower);
-        console.log(3444, ctPowerText.value);
+        console.log(5666, plantDetailsList.value.acTtlInPower);
         if (
           plantDetailsList.value.has50K ||
           plantDetailsList.value.hasTrexLp == true ||
@@ -1255,6 +1284,51 @@ const getflow = () => {
         }
         associationFlowElementsData();
       });
+      // setTimeout(() => {
+      //   display.value = true;
+      //   plantDetailsList.value.batteryCharging = Math.abs(
+      //     plantDetailsList.value.batteryCharging
+      //   );
+      //   plantDetailsList.value.batteryDischarge = Math.abs(
+      //     plantDetailsList.value.batteryDischarge
+      //   );
+      //   plantDetailsList.value.emsPower = Math.abs(
+      //     plantDetailsList.value.emsPower
+      //   );
+      //   plantDetailsList.value.acTtlInPower = Math.abs(
+      //     plantDetailsList.value.acTtlInPower
+      //   );
+
+      //   if (plantDetailsList.value.type == "T-REX") {
+      //     plantDetailsList.value.pvTotalPower = (
+      //       Number(plantDetailsList.value.pvTotalPower) / 1000
+      //     ).toFixed(1);
+      //     plantDetailsList.value.emsPower = (
+      //       Number(plantDetailsList.value.emsPower) / 1000
+      //     ).toFixed(1);
+      //     plantDetailsList.value.genPower = (
+      //       Number(plantDetailsList.value.genPower) / 1000
+      //     ).toFixed(1);
+      //     plantDetailsList.value.smartLoadTotalPower = (
+      //       Number(plantDetailsList.value.smartLoadTotalPower) / 1000
+      //     ).toFixed(1);
+      //     plantDetailsList.value.acTtlInPower = (
+      //       Number(plantDetailsList.value.acTtlInPower) / 1000
+      //     ).toFixed(1);
+      //     plantDetailsList.value.csAcTotalPower = (
+      //       Number(plantDetailsList.value.csAcTotalPower) / 1000
+      //     ).toFixed(1);
+      //     plantDetailsList.value.acTotalOutActPower = (
+      //       Number(plantDetailsList.value.acTotalOutActPower) / 1000
+      //     ).toFixed(1);
+      //     plantDetailsList.value.meterPower = (
+      //       Number(plantDetailsList.value.meterPower) / 1000
+      //     ).toFixed(1);
+      //   }
+      // }, 500);
+      // setTimeout(() => {
+      //   display.value = true;
+      // }, 500);
     }
   });
 };
@@ -1392,7 +1466,7 @@ const associationFlowElementsData = () => {
       smartLoad.show = true;
       smartLoad.img = microIVImg;
       smartLoad.img.show = true;
-      smartLoad.layoutXY.x -= 8;
+      smartLoad.layoutXY.x -= 20;
       smartLoad.name = t("lang.microinVersion");
       smartLoad.power = plantDetailsList.value?.microInvTotalPower || 0;
     }
@@ -1874,21 +1948,28 @@ const associationFlowElementsData = () => {
       let csAnimCircle = document.getElementById(
         chargingStation.animation.id + "Circle"
       );
-      [homeLoad, grid, centerIV, chargingStation].forEach((item) => {
-        // console.log(item.animation.begin);
+      // 把有延时动画的circle隐藏，避免组件加载后圆点显示到svg左上角，待动画开始再显示；同时改变circleR为4
+      [
+        pv,
+        battery,
+        smartLoad,
+        backupLoad,
+        homeLoad,
+        grid,
+        centerIV,
+        chargingStation,
+      ].forEach((item) => {
+        let circleEl = document.getElementById(item.animation.id + "Circle");
         if (item.animation.begin && item.animation.begin.slice(0) != 0) {
-          document.getElementById(
-            item.animation.id + "Circle"
-          ).style.opacity = 0;
+          circleEl ? (circleEl.style.opacity = 0) : "";
           let animEl = document.getElementById(item.animation.id);
           animEl &&
             animEl.addEventListener("beginEvent", () => {
-              document.getElementById(
-                item.animation.id + "Circle"
-              ).style.opacity = 1;
+              circleEl ? (circleEl.style.opacity = 1) : "";
             });
         }
       });
+      flowLayoutData.circleR = 4;
       let isCenterIVAnimReverse = centerIV.animation.needReverse;
       let isGridAnimReverse = grid.animation.needReverse;
       let isHomeLoadAnimReverse = homeLoad.animation.needReverse;
@@ -2075,681 +2156,24 @@ const associationFlowElementsData = () => {
     }, 100);
   });
 };
-/**
- * 链式执行 SVG 动画
- * @param {Array} animations - 动画配置数组
- * @param {string} animations[].animId - SVG动画元素ID
- * @param {Function} [animations[].onEnd] - 当前动画结束时的回调
- * @param {string} [animations[].targetId] - 需要控制显隐的元素ID
- * @param {boolean} [animations[].hideTarget] - 是否在动画结束时隐藏目标
- */
-function runSVGAnimChain(animations) {
-  console.log(animations);
 
-  let currentIndex = 0;
+// 显示比对结果
+const showCompar = (ele) => {
+  console.log(ele);
+  let iconKey = ele.img.iconKey;
+  console.log(iconKey);
 
-  function playNext() {
-    if (currentIndex >= animations.length) {
-      // currentIndex = 0; // 循环播放
-      // 如需单次播放，请删除上一行并 return
-    }
+  if (!iconKey) return;
+  icons.value = iconKey;
+  isShowComparison.value = true;
+  nextTick(() => {
+    comparison.value.open();
+  });
+};
 
-    const { animId, onEnd, targetId, hideTarget } = animations[currentIndex];
-    const animElement = document.getElementById(animId);
-
-    if (!animElement) return;
-
-    // 显示当前目标元素（如果有）
-    if (targetId) {
-      document.getElementById(targetId).style.opacity = "1";
-    }
-    // 监听动画结束
-    const handleEnd = () => {
-      animElement.removeEventListener("endEvent", handleEnd);
-
-      // 隐藏目标元素（如果需要）
-      if (targetId && hideTarget) {
-        document.getElementById(targetId).style.opacity = "0";
-      }
-      // 执行自定义回调
-      onEnd?.();
-      // 播放下一个动画
-      currentIndex++;
-      playNext();
-    };
-
-    animElement.addEventListener("endEvent", handleEnd);
-    animElement.beginElement(); // 开始动画
-  }
-  // 启动第一个动画
-  playNext();
-}
-
-// 有家庭负载时IV、grid、homeLoad、CS的流动动画步骤控制
-// 只控制每条path的动画次序，动画显示与否由上面的逻辑控制，这里假设所有动画都显示
-function animationControl(which) {
-  // nextTick(() => {
-  // console.log(which);
-  let { IVToRight, rightToIV, gridToHomeLoad, IVGridToHomeLoad } =
-    animationSituations;
-  let { centerIV, grid, homeLoad, chargingStation } = flowElementsData;
-  let getEl = (id) => document.querySelector("#" + id);
-  // document
-  //   .getElementById(grid.animation.id)
-  //   .addEventListener("endEvent", (e) => {
-  //     console.log(e);
-  //   });
-  // // 配置动画链
-  // runSVGAnimChain([
-  //   {
-  //     animId: centerIV.animation.id,
-  //     targetId: centerIV.animation.id + "Circle",
-  //     hideTarget: true,
-  //     onEnd: () => {
-  //       console.log("路径1动画结束");
-
-  //       runSVGAnimChain([
-  //         {
-  //           animId: grid.animation.id,
-  //           targetId: grid.animation.id + "Circle",
-  //           hideTarget: true,
-  //           onEnd: () => {
-  //             console.log("路径2动画结束");
-  //             runSVGAnimChain([
-  //               {
-  //                 animId: centerIV.animation.id,
-  //                 targetId: centerIV.animation.id + "Circle",
-  //                 hideTarget: true,
-  //                 onEnd: () => {
-  //                   console.log("路径1动画结束");
-  //                 },
-  //               },
-  //             ]);
-  //           },
-  //         },
-  //         {
-  //           animId: homeLoad.animation.id,
-  //           targetId: homeLoad.animation.id + "Circle",
-  //           hideTarget: true,
-  //           onEnd: () => console.log("路径2动画结束"),
-  //         },
-  //       ]);
-  //     },
-  //   },
-  // ]);
-  // if (which == IVToRight) {
-  //   handleEnd(
-  //     centerIV.animation.id,
-  //     centerIV.animation.id + "Circle",
-  //     grid.animation.id,
-  //     grid.animation.id + "Circle"
-  //   );
-  //   // handleEnd(
-  //   //   centerIV.animation.id,
-  //   //   centerIV.animation.id + "Circle",
-  //   //   homeLoad.animation.id,
-  //   //   homeLoad.animation.id + "Circle"
-  //   // );
-  // }
-  // });
-}
-// function handleEnd(currentAnimId, currentDotId, nextAnimId, nextDotId) {
-//   console.log(currentAnimId, currentDotId, nextAnimId, nextDotId);
-//   // 隐藏当前圆点
-//   document.getElementById(currentDotId).style.opacity = "0";
-//   // 播放下一个动画
-//   document.getElementById(nextAnimId).beginElement();
-//   // 显示下一个圆点（需根据 nextAnimId 对应的圆点设置）
-//   document.getElementById(nextDotId).style.opacity = "1";
-// }
-</script>
-<script>
-
-[
-    {
-        "id": "centerIV",
-        "show": true,
-        "name": "逆变器",
-        "point": {
-            "x": 530,
-            "y": 125
-        },
-        "img": {
-            "src": "http://localhost:5174/src/assets/img/liuxiangtu/ni.png",
-            "w": 97,
-            "h": 87,
-            "offset": [
-                "-w/2",
-                "-h/2"
-            ]
-        },
-        "alarmImg": {
-            "src": "http://localhost:5174/src/assets/img/liuxiangtu/ala.png",
-            "w": 35,
-            "h": 30
-        },
-        "path": {
-            "id": "centerIV-path",
-            "anotherEndpoint": {
-                "x": 984,
-                "y": 125
-            },
-            "singleLineEndPoint": "rightVLineCenter",
-            "singleLineShow": true,
-            "mode": "v",
-            "stroke": "#09a9f0",
-            "line": "M578.5,125 L578.5,125 L984,125",
-            "lineArr": [
-                [
-                    578.5,
-                    125
-                ],
-                [
-                    578.5,
-                    125
-                ],
-                [
-                    984,
-                    125
-                ]
-            ]
-        },
-        "animation": {
-            "id": "centerIVAnimation",
-            "show": true,
-            "dur": "5s",
-            "needReverse": false,
-            "isLoop": false
-        },
-        "layoutXY": {
-            "x": 481.5,
-            "y": 81.5
-        },
-        "connectionPoints": {
-            "leftTop": {
-                "x": 481.5,
-                "y": 103.25
-            },
-            "leftCenter": {
-                "x": 481.5,
-                "y": 125
-            },
-            "leftBottom": {
-                "x": 481.5,
-                "y": 146.75
-            },
-            "topCenter": {
-                "x": 530,
-                "y": 81.5
-            },
-            "bottomCenter": {
-                "x": 530,
-                "y": 168.5
-            },
-            "rightTop": {
-                "x": 578.5,
-                "y": 103.25
-            },
-            "rightCenter": {
-                "x": 578.5,
-                "y": 125
-            },
-            "rightBottom": {
-                "x": 578.5,
-                "y": 146.75
-            }
-        }
-    },
-    {
-        "id": "pv",
-        "show": true,
-        "name": "PV",
-        "power": "255",
-        "unit": "W",
-        "point": {
-            "x": 60,
-            "y": 10
-        },
-        "img": {
-            "show": true,
-            "src": "http://localhost:5174/src/assets/img/liuxiangtu/pv.png",
-            "w": 32,
-            "h": 38,
-            "offset": []
-        },
-        "path": {
-            "id": "pv-path",
-            "line": "M76,48 L76,103.25 L481.5,103.25",
-            "anotherEndpoint": {
-                "x": 481.5,
-                "y": 103.25
-            },
-            "mode": "v",
-            "stroke": "#09a9f0",
-            "lineArr": [
-                [
-                    76,
-                    48
-                ],
-                [
-                    76,
-                    103.25
-                ],
-                [
-                    481.5,
-                    103.25
-                ]
-            ]
-        },
-        "animation": {
-            "id": "pvAnimation",
-            "show": true,
-            "dur": "5s",
-            "needReverse": false,
-            "isLoop": true
-        },
-        "layoutXY": {
-            "x": 60,
-            "y": 10
-        }
-    },
-    {
-        "id": "battery",
-        "show": true,
-        "name": "电池放电",
-        "power": 43,
-        "unit": "W",
-        "leftText": {
-            "top": {
-                "show": false,
-                "value": 0,
-                "unit": "V"
-            },
-            "bottom": {
-                "show": true,
-                "value": "100",
-                "unit": "%"
-            }
-        },
-        "point": {
-            "x": 60,
-            "y": 240
-        },
-        "img": {
-            "show": true,
-            "src": "http://localhost:5174/src/assets/img/liuxiangtu/dianchi.png",
-            "w": 26,
-            "h": 32,
-            "offset": [
-                "-h"
-            ]
-        },
-        "path": {
-            "id": "battery-path",
-            "line": "M76,208 L76,146.75 L481.5,146.75",
-            "mode": "v",
-            "anotherEndpoint": {
-                "x": 481.5,
-                "y": 146.75
-            },
-            "stroke": "#09a9f0",
-            "lineArr": [
-                [
-                    76,
-                    208
-                ],
-                [
-                    76,
-                    146.75
-                ],
-                [
-                    481.5,
-                    146.75
-                ]
-            ]
-        },
-        "animation": {
-            "id": "batteryAnimation",
-            "show": true,
-            "dur": "5s",
-            "needReverse": false,
-            "isLoop": true
-        },
-        "layoutXY": {
-            "x": 60,
-            "y": 208
-        }
-    },
-    {
-        "id": "smartLoad",
-        "show": false,
-        "name": "智能负载",
-        "power": 0,
-        "unit": "W",
-        "point": {
-            "x": 530,
-            "y": 10
-        },
-        "img": {
-            "show": false,
-            "src": "http://localhost:5174/src/assets/img/liuxiangtu/dengpao.png",
-            "w": 24,
-            "h": 32,
-            "offset": [
-                "-w/2"
-            ]
-        },
-        "smartPointImg": {
-            "show": false,
-            "src": "http://localhost:5174/src/assets/img/liuxiangtu/smartport.png",
-            "w": 32,
-            "h": 32,
-            "offset": [
-                "-w/2"
-            ]
-        },
-        "microIVImg": {
-            "show": false,
-            "src": "http://localhost:5174/src/assets/img/liuxiangtu/mic.png",
-            "w": 40,
-            "h": 32,
-            "offset": [
-                "-w/2"
-            ]
-        },
-        "generatorImg": {
-            "show": false,
-            "src": "http://localhost:5174/src/assets/img/liuxiangtu/youji.png",
-            "w": 36,
-            "h": 32,
-            "offset": [
-                "-w/2"
-            ]
-        },
-        "path": {
-            "id": "smartLoad-path",
-            "line": "M530,42 L530,42 L530,81.5",
-            "anotherEndpoint": {
-                "x": 530,
-                "y": 81.5
-            },
-            "mode": "auto",
-            "stroke": "#09a9f0",
-            "lineArr": [
-                [
-                    530,
-                    42
-                ],
-                [
-                    530,
-                    42
-                ],
-                [
-                    530,
-                    81.5
-                ]
-            ]
-        },
-        "animation": {
-            "is": "smartLoadAnimation",
-            "show": false,
-            "dur": "1.5s",
-            "needReverse": false,
-            "isLoop": true
-        },
-        "layoutXY": {
-            "x": 518,
-            "y": 10
-        }
-    },
-    {
-        "id": "backupLoad",
-        "show": true,
-        "name": "备用负载",
-        "power": "0",
-        "unit": "W",
-        "point": {
-            "x": 530,
-            "y": 240
-        },
-        "img": {
-            "show": true,
-            "src": "http://localhost:5174/src/assets/img/liuxiangtu/xiang.png",
-            "w": 39,
-            "h": 33,
-            "offset": [
-                "-w/2",
-                "-h"
-            ]
-        },
-        "path": {
-            "id": "backupLoad-path",
-            "line": "M530,207 L530,207 L530,168.5",
-            "anotherEndpoint": {
-                "x": 530,
-                "y": 168.5
-            },
-            "mode": "auto",
-            "stroke": "#09a9f0",
-            "lineArr": [
-                [
-                    530,
-                    207
-                ],
-                [
-                    530,
-                    207
-                ],
-                [
-                    530,
-                    168.5
-                ]
-            ]
-        },
-        "animation": {
-            "id": "backupLoadAnimation",
-            "show": false,
-            "dur": "1.5s",
-            "needReverse": false,
-            "isLoop": true
-        },
-        "layoutXY": {
-            "x": 510.5,
-            "y": 207
-        }
-    },
-    {
-        "id": "grid",
-        "show": true,
-        "name": "馈电",
-        "power": 146,
-        "unit": "W",
-        "textPosition": "left",
-        "point": {
-            "x": 1000,
-            "y": 10
-        },
-        "img": {
-            "show": true,
-            "src": "http://localhost:5174/src/assets/img/liuxiangtu/dianta.png",
-            "w": 32,
-            "h": 38,
-            "offset": [
-                "-w"
-            ]
-        },
-        "meterImg": {
-            "src": "http://localhost:5174/src/assets/img/liuxiangtu/biaoxin.png",
-            "w": 18,
-            "h": 21,
-            "offset": [],
-            "show": true
-        },
-        "path": {
-            "id": "grid-path",
-            "line": "M984,48 L984,125 L984,125",
-            "anotherEndpoint": {
-                "x": 984,
-                "y": 125
-            },
-            "singleLineEndPoint": "rightVLineCenter",
-            "mode": "v",
-            "stroke": "#09a9f0",
-            "lineArr": [
-                [
-                    984,
-                    48
-                ],
-                [
-                    984,
-                    125
-                ],
-                [
-                    984,
-                    125
-                ]
-            ]
-        },
-        "animation": {
-            "id": "gridAnimation",
-            "show": true,
-            "dur": "5s",
-            "needReverse": true,
-            "isLoop": false,
-            "begin": "5s"
-        },
-        "layoutXY": {
-            "x": 968,
-            "y": 10
-        }
-    },
-    {
-        "id": "homeLoad",
-        "show": true,
-        "name": "家庭负载",
-        "power": 176,
-        "unit": "W",
-        "textPosition": "left",
-        "point": {
-            "x": 1000,
-            "y": 240
-        },
-        "img": {
-            "show": true,
-            "src": "http://localhost:5174/src/assets/img/liuxiangtu/wu.png",
-            "w": 23,
-            "h": 33,
-            "offset": [
-                "-w",
-                "-h"
-            ]
-        },
-        "twoWayBulbImg": {
-            "show": false,
-            "src": "http://localhost:5174/src/assets/img/liuxiangtu/youdeng.png",
-            "w": 13,
-            "h": 16,
-            "offset": [
-                "-w",
-                "-h"
-            ]
-        },
-        "path": {
-            "id": "homeLoad-path",
-            "line": "M984,207 L984,125 L984,125",
-            "anotherEndpoint": {
-                "x": 984,
-                "y": 125
-            },
-            "singleLineEndPoint": "rightVLineCenter",
-            "mode": "v",
-            "stroke": "#09a9f0",
-            "lineArr": [
-                [
-                    984,
-                    207
-                ],
-                [
-                    984,
-                    125
-                ],
-                [
-                    984,
-                    125
-                ]
-            ]
-        },
-        "animation": {
-            "id": "homeLoadAnimation",
-            "show": true,
-            "dur": "5s",
-            "needReverse": true,
-            "isLoop": false,
-            "begin": "5s"
-        },
-        "layoutXY": {
-            "x": 977,
-            "y": 207
-        }
-    },
-    {
-        "id": "chargingStation",
-        "show": false,
-        "name": "充电桩",
-        "power": "0",
-        "unit": "W",
-        "textPosition": "left",
-        "point": {
-            "x": 850,
-            "y": 166
-        },
-        "img": {
-            "show": true,
-            "src": "http://localhost:5174/src/assets/img/liuxiangtu/dianzhang.png",
-            "w": 36,
-            "h": 26,
-            "offset": [
-                "-h/2"
-            ]
-        },
-        "path": {
-            "id": "chargingStation-path",
-            "line": "M886,166 L886,166 L984,166",
-            "anotherEndpoint": {
-                "x": 984,
-                "y": 166
-            },
-            "singleLineEndPoint": "rightVLineBottomCenter",
-            "mode": "v",
-            "stroke": "#09a9f0",
-            "lineArr": [
-                [
-                    886,
-                    166
-                ],
-                [
-                    886,
-                    166
-                ],
-                [
-                    984,
-                    166
-                ]
-            ]
-        },
-        "animation": {
-            "id": "csAnimation",
-            "show": false,
-            "dur": "2.5s",
-            "needReverse": true,
-            "isLoop": false
-        },
-        "layoutXY": {
-            "x": 850,
-            "y": 153
-        }
-    }
-]
+const closeDraw = () => {
+  isShowComparison.value = true;
+};
 </script>
 <style lang="scss">
 @keyframes blink {
@@ -2762,5 +2186,9 @@ function animationControl(which) {
   100% {
     opacity: 1;
   }
+}
+
+.cursor-pointer {
+  cursor: pointer;
 }
 </style>
