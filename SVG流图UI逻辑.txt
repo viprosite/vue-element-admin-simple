@@ -273,6 +273,9 @@ const flowLayoutData = reactive({
  *
  * rightVLineCenter、rightVLineBottomCenter都是特殊情况下某些元素连接的另一端点
  *
+ *
+ * ！！！ 遗漏逻辑：如果显示的图标img是动态变化的，图标变化后需要重新用calcLayoutXY计算当前实际显示的图标布局位置
+ *
  * 多条线段的动画流控制：
  * 0. animateMotion动画拿不到circle的实时坐标
  * 1. svg动画不管条件如何都会自动执行一次
